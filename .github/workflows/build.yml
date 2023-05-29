@@ -4,49 +4,12 @@ on:
   workflow_dispatch:  # Allows manual triggering of the workflow
 
 jobs:
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-
-      - name: Set up Rust
-        uses: actions/setup-rust@v1
-
-      - name: Build for Linux
-        run: cargo build --release
-
-      - name: Install dependencies for cross-compiling
-        run: sudo apt-get update && sudo apt-get install -y mingw-w64
-
-      - name: Build for Windows
-        run: cargo build --release --target x86_64-pc-windows-gnu
-
-      - name: Install dependencies for OSX cross-compiling
-        run: |
-          curl -sSL https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly
-          export PATH="$HOME/.cargo/bin:$PATH"
-          rustup target add x86_64-apple-darwin
-
-      - name: Build for OSX
-        run: cargo build --release --target x86_64-apple-darwin
-
   release:
-    name: Release
-    needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'  # Only run on manual trigger
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-
-      - name: Set up Git
-        run: git config --global user.name "Skitsanos" && git config --global user.email "info@skitsanos.com"
-
-      - name: Tag and Release
-        run: |
-          git tag -a v${{ github.run_number }} -m "Release ${{ github.run_number }}"
-          git push origin v${{ github.run_number }}
+      - uses: actions/checkout@v3
+      - uses: manoadamro/rust-release@v1
+        with:
+          owner: ${{ github.repository_owner }}
+          repo: ${{ github.repository }}
+          token: ${{ secrets.GITHUB_TOKEN }}
