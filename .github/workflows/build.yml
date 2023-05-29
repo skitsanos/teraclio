@@ -1,7 +1,8 @@
 name: Build and Release
 
 on:
-  workflow_dispatch:  # Allows manual triggering of the workflow
+  release:
+    types: [created]
 
 jobs:
   release:
