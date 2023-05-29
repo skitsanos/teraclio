@@ -21,8 +21,6 @@ jobs:
             archive: tar.gz
           - target: x86_64-apple-darwin
             archive: zip
-          - target: wasm32-wasi
-            archive: zip tar.gz
     steps:
       - uses: actions/checkout@master
       - name: Compile and release
@@ -31,11 +29,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           RUSTTARGET: ${{ matrix.target }}
-          EXTRA_FILES: "README.md"
-          SRC_DIR: "hello"
+          SRC_DIR: "src"
           ARCHIVE_TYPES: ${{ matrix.archive }}
-          PRE_BUILD: "pre_build.sh"
-          POST_BUILD: "test/post_build.sh"
           MINIFY: "yes"
   release_without_not_required:
     name: release ${{ matrix.target }}
@@ -48,6 +43,8 @@ jobs:
       - uses: actions/checkout@master
       - name: Compile and release
         uses: rust-build/rust-build.action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           RUSTTARGET: ${{ matrix.target }}
           UPLOAD_MODE: none
