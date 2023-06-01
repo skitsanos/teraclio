@@ -1,6 +1,40 @@
 # teraclio
 > Tera-driven CLI tool. Built on top of `tera`-, a powerful, easy-to-use template engine for Rust by Vincent Prouillet, for more details on Tera, please refer to https://tera.netlify.app/
 
+### Running in command line
+
+You need just three arguments to pass to teraclio:
+
+-  `-s`, `--source` path to your JSON document with data.
+- `-d`, `--dest` path to the output produced by teraclio
+- `-t`, `--template` the template to use to transform your data
+
+```shell
+teraclio --source <json-source> --dest <output-file> --template <template-path>
+```
+
+For example, when you need to collect a list of unresolved issues from SonarQube and generate a basic report out of it, you could do the following:
+
+```shell
+curl -H "Authorization: Bearer $SONARQUBE_TOKEN" "$SONARQUBE_URL/api/issues/search?componentKeys=$PROJECT_KEY&resolved=no" | jq '.issues[] | {key, message, severity, component, textRange}' | jq --arg REPO_NAME "$REPO_NAME" --arg PROJECT_KEY "$PROJECT_KEY" -s '{issues: ., repo: $REPO_NAME, project: $PROJECT_KEY}' >report.json
+
+teraclio -s report.json -t template.txt -d report.txt
+```
+
+Where your `template.txt` could look like this:
+
+```
+Issues report for {{data.repo}}
+Project: {{get_env(name="PROJECT_NAME", default="")}}
+
+{% for issue in data.issues %}
+{{issue.component}}
+{{issue.message}}
+{% endfor %}
+```
+
+
+
 ### Tera Basics
 
 A Tera template is just a text file where variables and expressions are replaced with values when rendered. The syntax is based on Jinja2 and Django templates.
@@ -201,7 +235,7 @@ While filters can be used in math operations, they will have the lowest priority
 {{ (1 + a) | length } // this will probably error
 
 // This will do what you wanted initially
-{{ a | length + 1 }}
+   {{ a | length + 1 }}
 ```
 
 Tera has many [built-in filters](https://tera.netlify.app/docs/#built-in-filters) that you can use.
