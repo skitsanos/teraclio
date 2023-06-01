@@ -642,7 +642,7 @@ Remove space (` `) and line breaks (`\n` or `\r\n`) between HTML tags
 
 Example: `{{ value | spaceless }}`
 
-If the value is "<p>\n<a> </a>\r\n </p>", the output will be "<p><a></a></p>".
+If the value is `<p>\n<a> </a>\r\n </p>`, the output will be `<p><a></a></p>`.
 
 Note that only whitespace between successive opening tags and successive closing tags is removed.
 
