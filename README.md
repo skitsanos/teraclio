@@ -1,6 +1,10 @@
 # teraclio
 > Tera-driven CLI tool. Built on top of `tera`-, a powerful, easy-to-use template engine for Rust by Vincent Prouillet, for more details on Tera, please refer to https://tera.netlify.app/
 
+### Getting Teraclio
+
+Just grab the executable, compiled for your operating system, from the [Releases](https://github.com/skitsanos/teraclio/releases) section.
+
 ### Running in command line
 
 You need just three arguments to pass to teraclio:
@@ -33,7 +37,20 @@ Project: {{get_env(name="PROJECT_NAME", default="")}}
 {% endfor %}
 ```
 
+The content of your JSON document is available as `data` root element. So if your JSON document having the structure like this, for example:
 
+```json
+{
+  "issues": [],
+  "repo": "skitsanos/default-dashboard",
+  "pr": "200",
+  "project": "default-dashboard",
+  "createdOn": 1656023735372,
+  "updatedOn": 1656023735372
+}
+```
+
+To access `repo` property in your template, you would need to use `data.repo`.
 
 ### Tera Basics
 
@@ -572,8 +589,6 @@ If value is "I'm using Tera", the output will be "I\'m using Tera".
 
 #### slugify
 
-Only available if the `builtins` feature is enabled.
-
 Transforms a string into ASCII, lowercases it, trims it, converts spaces to hyphens and removes all characters that are not numbers, lowercase letters or hyphens.
 
 Example: `{{ value | slugify }}`
@@ -617,8 +632,6 @@ Example: `{{ value | trim_end_matches(pat="//") }}`
 If value is "//a/b/c//", the output will be "//a/b/c".
 
 #### truncate
-
-Only available if the `builtins` feature is enabled.
 
 Truncates a string to the indicated length. If the string has a smaller length than the `length` argument, the string is returned as is.
 
@@ -911,8 +924,6 @@ The `with` attribute is mandatory.
 
 #### urlencode
 
-Only available if the `builtins` feature is enabled.
-
 Percent-encodes all the characters in a string which are not included in unreserved chars (according to [RFC3986](https://tools.ietf.org/html/rfc3986)) with the exception of forward slash (`/`).
 
 Example: `{{ value | urlencode }}`
@@ -920,8 +931,6 @@ Example: `{{ value | urlencode }}`
 If value is `/foo?a=b&c=d`, the output will be `/foo%3Fa%3Db%26c%3Dd`. `/` is not escaped.
 
 #### urlencode_strict
-
-Only available if the `builtins` feature is enabled.
 
 Similar to `urlencode` filter but encodes all non-alphanumeric characters in a string including forward slashes (`/`).
 
@@ -955,15 +964,11 @@ Example: `{{ num | round }} {{ num | round(method="ceil", precision=2) }}`
 
 #### filesizeformat
 
-Only available if the `builtins` feature is enabled.
-
 Returns a human-readable file size (i.e. '110 MB') from an integer.
 
 Example: `{{ num | filesizeformat }}`
 
 #### date
-
-Only available if the `builtins` feature is enabled.
 
 Parses a timestamp into a date(time) string. Defaults to `YYYY-MM-DD` format. Time formatting syntax is inspired from strftime and a full reference is available on [chrono docs](https://docs.rs/chrono/0.4/chrono/format/strftime/index.html).
 
@@ -981,7 +986,7 @@ Example:
 {{ 1648252203 | date(timezone="Europe/Berlin") }}
 ```
 
-Locale can be specified (excepted when the input is a timestamp without timezone argument), default being POSIX. (only available if the `date-locale` feature is enabled)
+Locale can be specified (excepted when the input is a timestamp without timezone argument), default being POSIX.
 
 Example: `{{ 1648252203 | date(format="%A %-d %B", timezone="Europe/Paris", locale="fr_FR") }}`
 
@@ -1181,8 +1186,6 @@ Returns an array of integers created using the arguments given. There are 3 argu
 
 #### now
 
-Only available if the `builtins` feature is enabled.
-
 Returns the local datetime as string or the timestamp as integer if requested.
 
 There are 2 arguments, both booleans:
@@ -1201,8 +1204,6 @@ There is only one string argument:
 - `message`: the message to display as the error
 
 #### get_random
-
-Only available if the `builtins` feature is enabled.
 
 Returns a random integer in the given range. There are 2 arguments, both integers:
 
