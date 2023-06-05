@@ -7,12 +7,14 @@ use tera::{Context, Tera};
 use crate::base64decode::filter_base64_decode;
 use crate::base64encode::filter_base64_encode;
 use crate::bytes2str::filter_bytes_to_str;
+use crate::str2bytes::filter_str_to_bytes;
 use crate::utils::parse_json_source;
 
 mod utils;
 mod base64encode;
 mod base64decode;
 mod bytes2str;
+mod str2bytes;
 
 #[derive(StructOpt)]
 struct Cli {
@@ -45,6 +47,7 @@ fn main() {
     tera.register_filter("base64_encode", filter_base64_encode);
     tera.register_filter("base64_decode", filter_base64_decode);
     tera.register_filter("bytes_to_str", filter_bytes_to_str);
+    tera.register_filter("str_to_bytes", filter_str_to_bytes);
 
     tera.add_template_file(args.template_path.to_string_lossy().as_ref(), None).unwrap();
 
