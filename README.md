@@ -1,5 +1,5 @@
 # teraclio
-> Tera-driven CLI tool. Built on top of `tera`-, a powerful, easy-to-use template engine for Rust by Vincent Prouillet, for more details on Tera, please refer to https://tera.netlify.app/
+> Tera-driven CLI tool. Built on top of `tera`-, a powerful, easy-to-use template engine for Rust by Vincent Prouillet, for more details on Tera, please refer to [https://tera.netlify.app/](https://keats.github.io/tera/)
 
 ### Getting Teraclio
 
