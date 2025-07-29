@@ -2,11 +2,19 @@
 name = "teraclio"
 version = "1.2.1"
 edition = "2021"
+authors = ["skitsanos"]
+description = "A CLI tool for template rendering with Tera"
+repository = "https://github.com/skitsanos/teraclio"
+license = "MIT"
+keywords = ["cli", "template", "tera", "json", "rendering"]
+categories = ["command-line-utilities", "template-engine"]
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-structopt = "0.3.26"
-serde_json = "1.0.116"
-tera = "1.19.1"
+clap = { version = "4.5", features = ["derive"] }
+serde_json = "1.0.141"
+tera = "1.20.0"
 base64 = "0.22.1"
+anyhow = "1.0"

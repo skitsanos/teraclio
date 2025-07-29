@@ -1,11 +1,11 @@
-use std::fs::File;
-use std::io::Read;
-use std::path::PathBuf;
-
+use crate::error::{Result, TeraclioError};
 use serde_json::Value;
+use std::fs;
+use std::path::PathBuf;
 
 /**
  * Parse a JSON file into a serde_json::Value
+ * @author: skitsanos
  *
  * # Arguments
  *
@@ -15,14 +15,22 @@ use serde_json::Value;
  *
  * A serde_json::Value containing the parsed JSON data
  */
-pub fn parse_json_source(source_path: &PathBuf) -> Result<Value, Box<dyn std::error::Error>> {
-    // Read the contents of the JSON file
-    let mut file = File::open(source_path)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
+pub fn parse_json_source(source_path: &PathBuf) -> Result<Value> {
+    if !source_path.exists() {
+        return Err(TeraclioError::InvalidInput(format!(
+            "JSON source file does not exist: {}",
+            source_path.display()
+        )));
+    }
 
-    // Parse the JSON contents into a serde_json::Value
+    let contents = fs::read_to_string(source_path)?;
+
+    if contents.trim().is_empty() {
+        return Err(TeraclioError::InvalidInput(
+            "JSON source file is empty".to_string(),
+        ));
+    }
+
     let json_value: Value = serde_json::from_str(&contents)?;
-
     Ok(json_value)
 }

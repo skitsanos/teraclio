@@ -7,14 +7,18 @@ Just grab the executable, compiled for your operating system, from the [Releases
 
 ### Running in command line
 
-You need just three arguments to pass to teraclio:
+Teraclio requires two mandatory arguments and one optional:
 
--  `-s`, `--source` path to your JSON document with data.
-- `-d`, `--dest` path to the output produced by teraclio
-- `-t`, `--template` the template to use to transform your data
+-  `-s`, `--source` path to your JSON document with data (required)
+- `-t`, `--template` the template to use to transform your data (required)  
+- `-d`, `--dest` path to the output file (optional - outputs to stdout if not specified)
 
 ```shell
-teraclio --source <json-source> --dest <output-file> --template <template-path>
+# Output to file
+teraclio --source <json-source> --template <template-path> --dest <output-file>
+
+# Output to stdout
+teraclio --source <json-source> --template <template-path>
 ```
 
 For example, when you need to collect a list of unresolved issues from SonarQube and generate a basic report out of it, you could do the following:
@@ -22,7 +26,7 @@ For example, when you need to collect a list of unresolved issues from SonarQube
 ```shell
 curl -H "Authorization: Bearer $SONARQUBE_TOKEN" "$SONARQUBE_URL/api/issues/search?componentKeys=$PROJECT_KEY&resolved=no" | jq '.issues[] | {key, message, severity, component, textRange}' | jq --arg REPO_NAME "$REPO_NAME" --arg PROJECT_KEY "$PROJECT_KEY" -s '{issues: ., repo: $REPO_NAME, project: $PROJECT_KEY}' >report.json
 
-teraclio -s report.json -t template.txt -d report.txt
+teraclio --source report.json --template template.txt --dest report.txt
 ```
 
 Where your `template.txt` could look like this:
@@ -51,6 +55,34 @@ The content of your JSON document is available as `data` root element. So if you
 ```
 
 To access `repo` property in your template, you would need to use `data.repo`.
+
+### Custom Filters
+
+Teraclio includes several custom filters in addition to Tera's built-in filters:
+
+#### base64_encode
+Encodes a string to Base64 format.
+```jinja2
+{{ data.content | base64_encode }}
+```
+
+#### base64_decode  
+Decodes a Base64 string back to its original format.
+```jinja2
+{{ data.encoded_content | base64_decode }}
+```
+
+#### bytes_to_str
+Converts an array of bytes to a string.
+```jinja2
+{{ data.byte_array | bytes_to_str }}
+```
+
+#### str_to_bytes
+Converts a string to an array of bytes.
+```jinja2
+{{ data.text | str_to_bytes }}
+```
 
 ### Tera Basics
 

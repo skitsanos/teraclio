@@ -2,5 +2,24 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:base"
+  ],
+  "schedule": [
+    "before 4am on Monday"
+  ],
+  "assignees": ["skitsanos"],
+  "reviewers": ["skitsanos"],
+  "commitMessagePrefix": "chore(deps): ",
+  "semanticCommits": "enabled",
+  "rust": {
+    "rangeStrategy": "bump"
+  },
+  "packageRules": [
+    {
+      "matchPackagePatterns": ["*"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": false,
+      "groupName": "all non-major dependencies",
+      "groupSlug": "all-minor-patch"
+    }
   ]
 }
