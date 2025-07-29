@@ -80,4 +80,3 @@ pub fn parse_data_source(source_path: &PathBuf, format: Option<&str>) -> Result<
 
     Ok(value)
 }
-
