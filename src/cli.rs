@@ -17,7 +17,11 @@ pub struct Cli {
     )]
     pub output_file: Option<OsString>,
 
-    #[arg(long = "source", short = 's', help = "Path to the data source file (JSON, YAML, or TOML)")]
+    #[arg(
+        long = "source",
+        short = 's',
+        help = "Path to the data source file (JSON, YAML, or TOML)"
+    )]
     pub json_source: PathBuf,
 
     #[arg(

@@ -1,175 +1,207 @@
 # Custom Filters
 
-Teraclio extends Tera's built-in filters with additional functionality for data transformation. These custom filters are particularly useful for encoding/decoding operations and data format conversions.
+Teraclio extends Tera's built-in filters with 16+ custom filters organized into four main categories: Hash & Security, Web & URL, String Transformation, and Data Conversion. These filters provide comprehensive data transformation capabilities for modern template processing.
 
-## Base64 Filters
+## Hash & Security Filters
 
-### `base64_encode`
+### Hash Generation
 
-Encodes a string to Base64 format using standard Base64 encoding.
+Generate cryptographic hashes for data integrity and security purposes.
 
-**Syntax**: `{{ value | base64_encode }}`
+#### `md5`
+```jinja2
+{{ data.password | md5 }}
+```
+Generates MD5 hash (32 hex characters). Note: MD5 is cryptographically broken, use for non-security purposes only.
 
-**Example**:
+#### `sha1` 
+```jinja2
+{{ data.content | sha1 }}
+```
+Generates SHA-1 hash (40 hex characters). More secure than MD5 but consider SHA-256 for new applications.
+
+#### `sha256`
+```jinja2
+{{ data.sensitive_data | sha256 }}
+```
+Generates SHA-256 hash (64 hex characters). Recommended for security-critical applications.
+
+### Base64 Encoding
+
+#### `base64_encode`
 ```jinja2
 Input: {{ data.content }}
 Encoded: {{ data.content | base64_encode }}
 ```
 
-**Input JSON**:
-```json
-{
-  "content": "Hello, World!"
-}
-```
-
-**Output**:
-```
-Input: Hello, World!
-Encoded: SGVsbG8sIFdvcmxkIQ==
-```
-
-### `base64_decode`
-
-Decodes a Base64 string back to its original format.
-
-**Syntax**: `{{ value | base64_decode }}`
-
-**Example**:
+#### `base64_decode` 
 ```jinja2
-Encoded: {{ data.encoded }}
 Decoded: {{ data.encoded | base64_decode | bytes_to_str }}
 ```
+**Note**: Returns bytes, use `bytes_to_str` for text display.
 
-**Input JSON**:
-```json
-{
-  "encoded": "SGVsbG8sIFdvcmxkIQ=="
-}
+## Web & URL Filters
+
+Perfect for web development and API integrations.
+
+### `url_encode`
+```jinja2
+Original: {{ data.query }}
+Encoded: {{ data.query | url_encode }}
+```
+**Example**: `Hello World!` → `Hello%20World%21`
+
+### `url_decode`
+```jinja2
+Encoded: {{ data.encoded_url }}
+Decoded: {{ data.encoded_url | url_decode }}
 ```
 
-**Output**:
+### `html_escape`
+```jinja2
+Safe HTML: {{ data.user_content | html_escape }}
 ```
-Encoded: SGVsbG8sIFdvcmxkIQ==
-Decoded: Hello, World!
+**Example**: `<script>alert('xss')</script>` → `&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;`
+
+### `xml_escape`
+```jinja2
+Safe XML: {{ data.xml_content | xml_escape }}
 ```
+Escapes XML special characters for safe embedding.
 
-**Note**: Base64 decode returns bytes, often requiring `bytes_to_str` for text display.
+## String Transformation Filters
 
-## Bytes Conversion Filters
+Convert between different naming conventions.
+
+### `snake_case`
+```jinja2
+{{ "HelloWorld" | snake_case }}
+```
+**Output**: `hello_world`
+
+### `kebab_case`
+```jinja2
+{{ "HelloWorld" | kebab_case }}
+```
+**Output**: `hello-world`
+
+### `camel_case`
+```jinja2
+{{ "hello_world" | camel_case }}
+```
+**Output**: `helloWorld`
+
+### `pascal_case`
+```jinja2
+{{ "hello_world" | pascal_case }}
+```
+**Output**: `HelloWorld`
+
+## Data Conversion Filters
+
+Low-level data type conversions for advanced use cases.
 
 ### `bytes_to_str`
-
-Converts an array of bytes (numbers) to a UTF-8 string.
-
-**Syntax**: `{{ value | bytes_to_str }}`
-
-**Example**:
 ```jinja2
-Bytes: {{ data.byte_array }}
 String: {{ data.byte_array | bytes_to_str }}
 ```
-
-**Input JSON**:
-```json
-{
-  "byte_array": [72, 101, 108, 108, 111]
-}
-```
-
-**Output**:
-```
-Bytes: [72, 101, 108, 108, 111]
-String: Hello
-```
+Converts byte array `[72, 101, 108, 108, 111]` to `"Hello"`
 
 ### `str_to_bytes`
-
-Converts a string to an array of bytes (UTF-8 encoding).
-
-**Syntax**: `{{ value | str_to_bytes }}`
-
-**Example**:
 ```jinja2
-Text: {{ data.text }}
 Bytes: {{ data.text | str_to_bytes }}
 ```
+Converts `"Hi"` to `[72, 105]`
 
-**Input JSON**:
-```json
+## Real-World Examples
+
+### Security Token Generation
+```jinja2
+User: {{ data.username }}
+Token: {{ (data.username + ":" + data.timestamp) | sha256 }}
+API Key: {{ data.api_secret | base64_encode }}
+```
+
+### Web Form Processing
+```jinja2
+Search Query: {{ data.user_query | url_encode }}
+Safe Display: {{ data.user_input | html_escape }}
+CSS Class: {{ data.component_name | kebab_case }}
+```
+
+### Data Pipeline Template
+```jinja2
+{% for record in data.records %}
+{{ loop.index }}. Processing {{ record.filename | pascal_case }}
+   Hash: {{ record.content | sha256 }}
+   Size: {{ record.content | length }} chars
+   Encoded: {{ record.content | base64_encode | truncate(length=20) }}...
+{% endfor %}
+```
+
+### API Response Template
+```jinja2
 {
-  "text": "Hi"
+  "user_id": "{{ data.user.id }}",
+  "display_name": "{{ data.user.name | html_escape }}",
+  "profile_url": "/users/{{ data.user.name | url_encode }}",
+  "avatar_hash": "{{ data.user.email | md5 }}",
+  "api_version": "{{ data.version | snake_case }}"
 }
 ```
 
-**Output**:
-```
-Text: Hi
-Bytes: [72, 105]
-```
-
-## Combined Filter Examples
-
-### Round-trip Base64 Encoding
+### Configuration Generator
 ```jinja2
-Original: {{ data.message }}
-Encoded: {{ data.message | base64_encode }}
-Decoded: {{ data.message | base64_encode | base64_decode | bytes_to_str }}
-```
-
-### Binary Data Processing
-```jinja2
-{% set binary_data = data.text | str_to_bytes %}
-Byte count: {{ binary_data | length }}
-First byte: {{ binary_data | first }}
-Last byte: {{ binary_data | last }}
-Back to string: {{ binary_data | bytes_to_str }}
-```
-
-### Data Validation Template
-```jinja2
-{% for item in data.items %}
-Item: {{ item.name }}
-{% if item.encoded_data %}
-  Encoded Size: {{ item.encoded_data | length }} chars
-  Decoded Size: {{ item.encoded_data | base64_decode | length }} bytes
-  Content: {{ item.encoded_data | base64_decode | bytes_to_str | truncate(length=50) }}
-{% endif %}
-
+# Generated configuration
+{% for service in data.services %}
+[service.{{ service.name | snake_case }}]
+endpoint = "{{ service.url | url_encode }}"
+api_key_hash = "{{ service.api_key | sha256 }}"
+display_name = "{{ service.name | pascal_case }}"
 {% endfor %}
+```
+
+## Filter Chaining & Integration
+
+All custom filters integrate seamlessly with Tera's built-in filters:
+
+```jinja2
+{# Chain multiple transformations #}
+{{ data.api_name | snake_case | upper }}
+{{ data.user_input | html_escape | truncate(length=50) }}
+
+{# Complex data processing #}
+{% for item in data.items %}
+{{ loop.index }}. {{ item.name | pascal_case }}
+   Hash: {{ item.content | sha256 | truncate(length=16) }}...
+   URL: /api/{{ item.name | kebab_case }}/{{ item.id }}
+{% endfor %}
+
+{# Conditional processing #}
+{% if data.password | length > 8 %}
+Strong password hash: {{ data.password | sha256 }}
+{% else %}
+Weak password detected
+{% endif %}
 ```
 
 ## Error Handling
 
-Custom filters include error handling for invalid inputs:
+All custom filters include comprehensive error handling:
 
-- **base64_decode**: Returns error for invalid Base64 strings
-- **bytes_to_str**: Handles invalid UTF-8 sequences gracefully  
-- **str_to_bytes**: Always succeeds for valid strings
+- **Hash filters**: Always succeed for string inputs
+- **Base64 operations**: Validate input format and encoding
+- **URL operations**: Handle special characters correctly
+- **Case conversions**: Work with any Unicode string
+- **Escape filters**: Prevent injection attacks
 
-**Example error case**:
-```jinja2
-Invalid Base64: {{ "invalid-base64!" | base64_decode }}
-```
+Invalid operations will result in clear template errors with descriptive messages.
 
-This would result in a template error: `Failed to decode Base64: invalid input`
+## Performance Notes
 
-## Integration with Tera Built-ins
+- Hash operations are cryptographically secure but computationally expensive
+- Case conversions are optimized for common ASCII strings
+- URL and HTML escaping use efficient lookup tables
+- Base64 operations use standard library implementations
 
-Custom filters work seamlessly with Tera's built-in filters:
-
-```jinja2
-{# Combine with built-in filters #}
-{{ data.message | upper | base64_encode }}
-{{ data.encoded | base64_decode | bytes_to_str | title }}
-
-{# Use in conditionals #}
-{% if data.payload | base64_decode | bytes_to_str | length > 100 %}
-Large payload detected
-{% endif %}
-
-{# Use in loops #}
-{% for item in data.items %}
-{{ loop.index }}. {{ item | base64_decode | bytes_to_str }}
-{% endfor %}
-```
+For high-volume template rendering, consider caching computed hashes and avoiding repeated expensive operations in loops.

@@ -107,9 +107,9 @@ database = {{ data.database.name }}
 {{ feature }} = {{ enabled | lower }}
 {% endfor %}
 
-# Environment-specific settings
-debug = {{ get_env(name="DEBUG", default="false") }}
-log_level = {{ get_env(name="LOG_LEVEL", default="info") }}
+# Environment-specific settings (use --env-vars flag)
+debug = {{ data.env.DEBUG | default(value="false") }}
+log_level = {{ data.env.LOG_LEVEL | default(value="info") }}
 ```
 
 ### HTML Report Generation
@@ -184,15 +184,132 @@ log_level = {{ get_env(name="LOG_LEVEL", default="info") }}
 
 ## Custom Filter Examples
 
-### Data Encoding/Decoding
+### Hash & Security Filters
 
-**Data** (`encoded-data.json`):
+**Data** (`user-data.json`):
+```json
+{
+  "users": [
+    {
+      "username": "alice",
+      "email": "alice@example.com",
+      "password": "secret123",
+      "api_key": "myapikey123"
+    },
+    {
+      "username": "bob", 
+      "email": "bob@example.com",
+      "password": "password456",
+      "api_key": "bobsecret456"
+    }
+  ]
+}
+```
+
+**Template** (`user-security.txt`):
+```jinja2
+User Security Report
+===================
+
+{% for user in data.users %}
+User: {{ user.username }}
+Email Hash (MD5): {{ user.email | md5 }}
+Password Hash (SHA256): {{ user.password | sha256 }}
+API Key (Base64): {{ user.api_key | base64_encode }}
+
+{% endfor %}
+```
+
+### Web & URL Filters
+
+**Data** (`web-data.json`):
+```json
+{
+  "search_queries": [
+    "hello world",
+    "rust programming",
+    "template engine"
+  ],
+  "user_content": "<script>alert('xss')</script>",
+  "api_endpoints": [
+    "/users/search?q=john doe",
+    "/products/search?category=electronics & computers"
+  ]
+}
+```
+
+**Template** (`web-safe-output.html`):
+```jinja2
+<!DOCTYPE html>
+<html>
+<head><title>Search Results</title></head>
+<body>
+    <h1>Search Queries</h1>
+    <ul>
+    {% for query in data.search_queries %}
+        <li><a href="/search?q={{ query | url_encode }}">{{ query }}</a></li>
+    {% endfor %}
+    </ul>
+    
+    <h2>User Content (Escaped)</h2>
+    <p>{{ data.user_content | html_escape }}</p>
+    
+    <h2>API Endpoints</h2>
+    {% for endpoint in data.api_endpoints %}
+    <code>{{ endpoint | url_encode }}</code><br>
+    {% endfor %}
+</body>
+</html>
+```
+
+### String Case Conversion
+
+**Data** (`api-spec.json`):
+```json
+{
+  "service_name": "UserAuthenticationService",
+  "endpoints": [
+    {"name": "getUserProfile", "method": "GET"},
+    {"name": "updateUserSettings", "method": "POST"},
+    {"name": "deleteUserAccount", "method": "DELETE"}
+  ],
+  "database_tables": ["user_profiles", "authentication_tokens"]
+}
+```
+
+**Template** (`api-documentation.md`):
+```jinja2
+# {{ data.service_name | kebab_case }} API
+
+Service: {{ data.service_name | pascal_case }}  
+Database: {{ data.service_name | snake_case }}_db
+
+## Endpoints
+
+{% for endpoint in data.endpoints %}
+### {{ endpoint.name | pascal_case }}
+- **Method:** {{ endpoint.method }}
+- **Function:** `{{ endpoint.name | camel_case }}`
+- **Route:** `/{{ endpoint.name | kebab_case }}`
+- **Handler:** `{{ endpoint.name | snake_case }}_handler`
+
+{% endfor %}
+
+## Database Tables
+{% for table in data.database_tables %}
+- {{ table | pascal_case }} (`{{ table }}`)
+{% endfor %}
+```
+
+### Data Encoding & Processing
+
+**Data** (`encoded-messages.json`):
 ```json
 {
   "messages": [
     {
       "id": 1,
-      "encoded": "SGVsbG8gV29ybGQh",
+      "content": "Hello World!",
       "sender": "system"
     },
     {
@@ -204,50 +321,25 @@ log_level = {{ get_env(name="LOG_LEVEL", default="info") }}
 }
 ```
 
-**Template** (`decoded-messages.txt`):
+**Template** (`message-processing.txt`):
 ```jinja2
-Decoded Messages
-================
+Message Processing Report
+========================
 
 {% for msg in data.messages %}
 Message {{ msg.id }} from {{ msg.sender }}:
-Encoded: {{ msg.encoded }}
-Decoded: {{ msg.encoded | base64_decode | bytes_to_str }}
+{% if msg.content %}
+  Content: {{ msg.content }}
+  SHA256: {{ msg.content | sha256 }}
+  Base64: {{ msg.content | base64_encode }}
+  Bytes: {{ msg.content | str_to_bytes | length }} bytes
+{% elif msg.encoded %}
+  Encoded: {{ msg.encoded }}
+  Decoded: {{ msg.encoded | base64_decode | bytes_to_str }}
+  Hash: {{ msg.encoded | base64_decode | bytes_to_str | sha256 }}
+{% endif %}
 
 {% endfor %}
-```
-
-### Binary Data Processing
-
-**Data** (`binary-data.json`):
-```json
-{
-  "filename": "document.pdf",
-  "content": "Hello Binary World",
-  "metadata": {
-    "type": "text",
-    "encoding": "utf-8"
-  }
-}
-```
-
-**Template** (`binary-analysis.txt`):
-```jinja2
-File Analysis: {{ data.filename }}
-{{ "=" * (data.filename | length + 15) }}
-
-Content: {{ data.content }}
-Byte representation: {{ data.content | str_to_bytes }}
-Byte count: {{ data.content | str_to_bytes | length }}
-
-Encoded versions:
-- Base64: {{ data.content | base64_encode }}
-- Hex representation: {% for byte in data.content | str_to_bytes %}{{ "%02x" | format(byte) }}{% endfor %}
-
-Round-trip test:
-Original: {{ data.content }}
-Processed: {{ data.content | str_to_bytes | bytes_to_str }}
-Match: {{ data.content == (data.content | str_to_bytes | bytes_to_str) }}
 ```
 
 ## Integration Examples
@@ -354,14 +446,166 @@ spec:
           value: "{{ value }}"
         {% endfor %}
         - name: ENVIRONMENT
-          value: "{{ get_env(name="ENVIRONMENT", default="production") }}"
+          value: "{{ data.env.ENVIRONMENT | default(value="production") }}"
+```
+
+## Multi-Format & Environment Examples
+
+### YAML Configuration Processing
+
+**Data** (`app-config.yaml`):
+```yaml
+app:
+  name: MyWebApp
+  version: 2.1.0
+database:
+  host: localhost
+  port: 5432
+services:
+  - name: auth_service
+    port: 8001
+  - name: user_service  
+    port: 8002
+```
+
+**Template** (`docker-compose.yml`):
+```jinja2
+version: '3.8'
+services:
+  {{ data.app.name | kebab_case }}:
+    image: {{ data.app.name | kebab_case }}:{{ data.app.version }}
+    environment:
+      - DATABASE_URL={{ data.env.DATABASE_URL | default(value="postgresql://localhost:5432/app") }}
+      - API_KEY={{ data.env.API_KEY | sha256 }}
+    ports:
+      - "8080:8080"
+      
+{% for service in data.services %}
+  {{ service.name | kebab_case }}:
+    image: {{ service.name | kebab_case }}:latest
+    ports:
+      - "{{ service.port }}:{{ service.port }}"
+{% endfor %}
+```
+
+**Command**:
+```bash
+teraclio -s app-config.yaml -t docker-compose.yml --env-vars
+```
+
+### TOML Configuration Example
+
+**Data** (`build-config.toml`):
+```toml
+[package]
+name = "my-rust-app"
+version = "1.0.0"
+
+[build]
+target = "x86_64-unknown-linux-gnu"
+features = ["ssl", "database"]
+
+[[dependencies]]
+name = "serde"
+version = "1.0"
+
+[[dependencies]]
+name = "tokio"
+version = "1.0"
+```
+
+**Template** (`Cargo.toml.template`):
+```jinja2
+[package]
+name = "{{ data.package.name | kebab_case }}"
+version = "{{ data.package.version }}"
+edition = "2021"
+
+# Build configuration
+# Target: {{ data.build.target }}
+# Features: {{ data.build.features | join(sep=", ") }}
+
+[dependencies]
+{% for dep in data.dependencies %}
+{{ dep.name }} = "{{ dep.version }}"
+{% endfor %}
+
+# Environment-specific dependencies
+{% if data.env.ENVIRONMENT == "development" %}
+tokio-test = "0.4"
+{% endif %}
+```
+
+**Command**:
+```bash
+teraclio -s build-config.toml -t Cargo.toml.template --env-vars -d Cargo.toml
+```
+
+### Advanced Filter Combinations
+
+**Data** (`complex-data.json`):
+```json
+{
+  "project": "WebApp2024",
+  "users": [
+    {"email": "admin@example.com", "role": "Administrator"},
+    {"email": "user@example.com", "role": "StandardUser"}
+  ],
+  "api_endpoints": [
+    "getUserProfile",
+    "updateUserSettings", 
+    "deleteAccount"
+  ]
+}
+```
+
+**Template** (`security-report.md`):
+```jinja2
+# {{ data.project | pascal_case }} Security Report
+
+Generated on: {{ data.env.BUILD_DATE | default(value="unknown") }}
+Environment: {{ data.env.ENVIRONMENT | default(value="development") | upper }}
+
+## User Analysis
+
+{% for user in data.users %}
+### {{ user.role | pascal_case }}
+- **Email Hash**: `{{ user.email | md5 }}`
+- **Role**: {{ user.role | snake_case | upper }}
+- **Safe Display**: {{ user.email | html_escape }}
+- **URL Param**: `email={{ user.email | url_encode }}`
+
+{% endfor %}
+
+## API Endpoints
+
+| Endpoint | Route | Handler | CSS Class |
+|----------|-------|---------|-----------|
+{% for endpoint in data.api_endpoints -%}
+| {{ endpoint | pascal_case }} | `/{{ endpoint | kebab_case }}` | `{{ endpoint | snake_case }}_handler` | `{{ endpoint | kebab_case }}-btn` |
+{% endfor %}
+
+## Security Tokens
+
+Project Hash: `{{ data.project | sha256 }}`  
+Session Token: `{{ (data.project + ":" + data.env.BUILD_ID | default(value="dev")) | base64_encode }}`
+```
+
+**Command**:
+```bash
+BUILD_DATE=$(date -Iseconds) BUILD_ID=12345 ENVIRONMENT=production \
+teraclio -s complex-data.json -t security-report.md --env-vars
 ```
 
 ## Tips and Best Practices
 
-1. **Use meaningful variable names** in your JSON data
-2. **Provide defaults** for optional fields: `{{ data.optional | default(value="N/A") }}`
-3. **Validate your JSON** before running Teraclio
-4. **Test templates** with sample data during development
-5. **Use comments** in templates to document complex logic
-6. **Break down large templates** into smaller, reusable components when possible
+1. **Use meaningful variable names** in your data files
+2. **Leverage auto-detection** - let Teraclio detect JSON/YAML/TOML by file extension
+3. **Combine filters** for powerful transformations: `{{ name | snake_case | upper }}`
+4. **Use environment variables** with `--env-vars` for dynamic configuration
+5. **Provide defaults** for optional fields: `{{ data.optional | default(value="N/A") }}`
+6. **Validate your data** before running Teraclio  
+7. **Test templates** with sample data during development
+8. **Use security filters** (hash, escape) for sensitive data handling
+9. **Chain case conversions** for consistent naming across systems
+10. **Document complex template logic** with comments

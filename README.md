@@ -21,10 +21,14 @@ teraclio --source data.json --template template.txt
 
 - 🚀 **Fast & Lightweight** - Single binary with no dependencies
 - 📝 **Powerful Templating** - Full Tera template engine support
-- 🔧 **Custom Filters** - Base64 encoding/decoding, bytes conversion
-- 📊 **JSON Integration** - Direct JSON data access in templates
+- 🔧 **Extensive Filter Library** - 16+ custom filters for data transformation
+- 📊 **Multi-Format Input** - JSON, YAML, TOML with auto-detection
 - 🌍 **Cross-Platform** - Linux, macOS, Windows (Intel & ARM)
-- ⚡ **Stdout Support** - Output to file or stdout
+- ⚡ **Flexible Output** - File output or stdout with format detection
+- 🔒 **Security Filters** - Hash generation (MD5, SHA1, SHA256)
+- 🌐 **Web-Ready** - URL encoding, HTML/XML escaping
+- 🔤 **Case Conversion** - snake_case, kebab-case, camelCase, PascalCase
+- 🌍 **Environment Integration** - Access environment variables in templates
 
 ## Documentation
 
@@ -37,14 +41,16 @@ teraclio --source data.json --template template.txt
 ## Basic Usage
 
 ```bash
-teraclio --source <json-file> --template <template-file> [--dest <output-file>]
+teraclio --source <data-file> --template <template-file> [OPTIONS]
 ```
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `--source, -s` | ✅ | JSON data file |
+| `--source, -s` | ✅ | Data file (JSON, YAML, TOML) |
 | `--template, -t` | ✅ | Tera template file |
 | `--dest, -d` | ❌ | Output file (stdout if omitted) |
+| `--format, -f` | ❌ | Input format (auto-detected from extension) |
+| `--env-vars` | ❌ | Include environment variables as `data.env` |
 
 ## Quick Examples
 
@@ -75,12 +81,21 @@ teraclio -s data.json -t encode.txt
 
 ## Custom Filters
 
-Teraclio extends Tera with additional filters:
+Teraclio extends Tera with 16+ custom filters organized by category:
 
+**Hash & Security**
+- `md5`, `sha1`, `sha256` - Generate cryptographic hashes
 - `base64_encode` / `base64_decode` - Base64 operations
+
+**Web & URL**
+- `url_encode` / `url_decode` - URL encoding/decoding
+- `html_escape` / `xml_escape` - HTML/XML entity escaping
+
+**String Transformation**
+- `snake_case`, `kebab_case`, `camel_case`, `pascal_case` - Case conversions
 - `bytes_to_str` / `str_to_bytes` - Bytes/string conversion
 
-See [Custom Filters Documentation](docs/custom-filters.md) for details.
+See [Custom Filters Documentation](docs/custom-filters.md) for complete details and examples.
 
 ## Contributing
 

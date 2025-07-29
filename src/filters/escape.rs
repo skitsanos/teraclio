@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use serde_json::Value;
-use tera::Error;
 use html_escape;
+use serde_json::Value;
+use std::collections::HashMap;
+use tera::Error;
 
 /**
  * HTML escape filter for Tera templates

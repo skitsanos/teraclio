@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use serde_json::Value;
-use tera::Error;
 use convert_case::{Case, Casing};
+use serde_json::Value;
+use std::collections::HashMap;
+use tera::Error;
 
 /**
  * Convert string to snake_case

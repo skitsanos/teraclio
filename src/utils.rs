@@ -1,7 +1,7 @@
 use crate::error::{Result, TeraclioError};
 use serde_json::Value;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
 pub enum InputFormat {
@@ -11,7 +11,7 @@ pub enum InputFormat {
 }
 
 impl InputFormat {
-    pub fn detect_from_extension(path: &PathBuf) -> Self {
+    pub fn detect_from_extension(path: &Path) -> Self {
         if let Some(extension) = path.extension().and_then(|ext| ext.to_str()) {
             match extension.to_lowercase().as_str() {
                 "yaml" | "yml" => InputFormat::Yaml,
@@ -29,8 +29,7 @@ impl InputFormat {
             "yaml" | "yml" => Ok(InputFormat::Yaml),
             "toml" => Ok(InputFormat::Toml),
             _ => Err(TeraclioError::InvalidInput(format!(
-                "Unsupported input format: {}. Supported formats: json, yaml, toml",
-                format_str
+                "Unsupported input format: {format_str}. Supported formats: json, yaml, toml"
             ))),
         }
     }
@@ -72,25 +71,13 @@ pub fn parse_data_source(source_path: &PathBuf, format: Option<&str>) -> Result<
     };
 
     let value = match input_format {
-        InputFormat::Json => {
-            serde_json::from_str(&contents).map_err(TeraclioError::JsonError)?
-        }
-        InputFormat::Yaml => {
-            serde_yaml::from_str(&contents).map_err(|e| {
-                TeraclioError::InvalidInput(format!("YAML parsing error: {}", e))
-            })?
-        }
-        InputFormat::Toml => {
-            toml::from_str(&contents).map_err(|e| {
-                TeraclioError::InvalidInput(format!("TOML parsing error: {}", e))
-            })?
-        }
+        InputFormat::Json => serde_json::from_str(&contents).map_err(TeraclioError::JsonError)?,
+        InputFormat::Yaml => serde_yaml::from_str(&contents)
+            .map_err(|e| TeraclioError::InvalidInput(format!("YAML parsing error: {e}")))?,
+        InputFormat::Toml => toml::from_str(&contents)
+            .map_err(|e| TeraclioError::InvalidInput(format!("TOML parsing error: {e}")))?,
     };
 
     Ok(value)
 }
 
-// Keep the old function for backward compatibility
-pub fn parse_json_source(source_path: &PathBuf) -> Result<Value> {
-    parse_data_source(source_path, Some("json"))
-}

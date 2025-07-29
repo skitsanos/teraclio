@@ -30,10 +30,7 @@ fn main() -> Result<()> {
 fn run() -> Result<()> {
     let args = Cli::parse();
 
-    let mut json_data = parse_data_source(
-        &args.json_source,
-        args.input_format.as_deref()
-    )?;
+    let mut json_data = parse_data_source(&args.json_source, args.input_format.as_deref())?;
 
     // Add environment variables if requested
     if args.include_env_vars {

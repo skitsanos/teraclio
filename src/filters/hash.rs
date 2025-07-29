@@ -1,8 +1,8 @@
-use std::collections::HashMap;
 use serde_json::Value;
-use tera::Error;
 use sha1::Sha1;
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
+use tera::Error;
 
 /**
  * MD5 hash filter for Tera templates
@@ -11,7 +11,7 @@ use sha2::{Sha256, Digest};
 pub fn filter_md5(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
     let input_str = value.as_str().unwrap_or("");
     let result = md5::compute(input_str.as_bytes());
-    let hash_string = format!("{:x}", result);
+    let hash_string = format!("{result:x}");
     Ok(tera::to_value(hash_string).unwrap())
 }
 
@@ -24,7 +24,7 @@ pub fn filter_sha1(value: &Value, _args: &HashMap<String, Value>) -> Result<Valu
     let mut hasher = Sha1::new();
     Digest::update(&mut hasher, input_str.as_bytes());
     let result = hasher.finalize();
-    let hash_string = format!("{:x}", result);
+    let hash_string = format!("{result:x}");
     Ok(tera::to_value(hash_string).unwrap())
 }
 
@@ -37,6 +37,6 @@ pub fn filter_sha256(value: &Value, _args: &HashMap<String, Value>) -> Result<Va
     let mut hasher = Sha256::new();
     Digest::update(&mut hasher, input_str.as_bytes());
     let result = hasher.finalize();
-    let hash_string = format!("{:x}", result);
+    let hash_string = format!("{result:x}");
     Ok(tera::to_value(hash_string).unwrap())
 }
