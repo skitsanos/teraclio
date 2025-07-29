@@ -1,8 +1,9 @@
 use crate::cli::Cli;
 use crate::engine::TemplateEngine;
 use crate::error::Result;
-use crate::utils::parse_json_source;
+use crate::utils::parse_data_source;
 use clap::Parser;
+use serde_json::Value;
 
 mod cli;
 mod engine;
@@ -29,7 +30,20 @@ fn main() -> Result<()> {
 fn run() -> Result<()> {
     let args = Cli::parse();
 
-    let json_data = parse_json_source(&args.json_source)?;
+    let mut json_data = parse_data_source(
+        &args.json_source,
+        args.input_format.as_deref()
+    )?;
+
+    // Add environment variables if requested
+    if args.include_env_vars {
+        if let Value::Object(ref mut map) = json_data {
+            let env_vars: serde_json::Map<String, Value> = std::env::vars()
+                .map(|(k, v)| (k, Value::String(v)))
+                .collect();
+            map.insert("env".to_string(), Value::Object(env_vars));
+        }
+    }
 
     let mut engine = TemplateEngine::new();
     engine.load_template(&args.template_path)?;

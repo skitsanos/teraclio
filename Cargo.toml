@@ -18,3 +18,15 @@ serde_json = "1.0.141"
 tera = "1.20.0"
 base64 = "0.22.1"
 anyhow = "1.0"
+
+# Additional filters
+md5 = "0.7"
+sha1 = "0.10"
+sha2 = "0.10"
+urlencoding = "2.1"
+html-escape = "0.2"
+convert_case = "0.6"
+
+# Input format support
+serde_yaml = "0.9"
+toml = "0.8"

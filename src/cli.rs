@@ -17,6 +17,19 @@ pub struct Cli {
     )]
     pub output_file: Option<OsString>,
 
-    #[arg(long = "source", short = 's', help = "Path to the JSON source file")]
+    #[arg(long = "source", short = 's', help = "Path to the data source file (JSON, YAML, or TOML)")]
     pub json_source: PathBuf,
+
+    #[arg(
+        long = "format",
+        short = 'f',
+        help = "Input format (json, yaml, toml) - auto-detected if not specified"
+    )]
+    pub input_format: Option<String>,
+
+    #[arg(
+        long = "env-vars",
+        help = "Include environment variables in template data as 'env' object"
+    )]
+    pub include_env_vars: bool,
 }
