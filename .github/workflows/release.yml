@@ -12,41 +12,37 @@ jobs:
   create-release:
     name: Create Release
     runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
-          body: |
-            ## Changes
-            
-            - Updated dependencies to latest versions
-            - Migrated from structopt to clap 4.x
-            - Improved error handling and validation
-            - Enhanced CLI interface with better help messages
-            - Added comprehensive custom filters documentation
-            
-            ## Installation
-            
-            Download the appropriate binary for your platform below.
-            
-            ## Usage
-            
-            ```bash
-            # Output to file
-            teraclio --source data.json --template template.txt --dest output.txt
-            
-            # Output to stdout
-            teraclio --source data.json --template template.txt
-            ```
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create ${{ github.ref_name }} \
+            --title "Release ${{ github.ref_name }}" \
+            --notes "## Changes
+          
+          - Updated dependencies to latest versions
+          - Migrated from structopt to clap 4.x
+          - Improved error handling and validation
+          - Enhanced CLI interface with better help messages
+          - Added comprehensive custom filters documentation
+          
+          ## Installation
+          
+          Download the appropriate binary for your platform below.
+          
+          ## Usage
+          
+          \`\`\`bash
+          # Output to file
+          teraclio --source data.json --template template.txt --dest output.txt
+          
+          # Output to stdout
+          teraclio --source data.json --template template.txt
+          \`\`\`"
 
   build-release:
     name: Build Release (${{ matrix.os }})
@@ -124,27 +120,15 @@ jobs:
           cd target/${{ matrix.target }}/release
           7z a ../../../${{ matrix.asset_name }}.zip ${{ matrix.artifact_name }}
 
-      - name: Upload Release Asset (Unix)
-        if: matrix.os != 'windows-latest'
-        uses: actions/upload-release-asset@v1
+      - name: Upload archive to release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ${{ matrix.asset_name }}.tar.gz
-          asset_name: ${{ matrix.asset_name }}.tar.gz
-          asset_content_type: application/gzip
-
-      - name: Upload Release Asset (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ${{ matrix.asset_name }}.zip
-          asset_name: ${{ matrix.asset_name }}.zip
-          asset_content_type: application/zip
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            gh release upload ${{ github.ref_name }} ${{ matrix.asset_name }}.zip
+          else
+            gh release upload ${{ github.ref_name }} ${{ matrix.asset_name }}.tar.gz
+          fi
 
   publish-crates-io:
     name: Publish to crates.io
