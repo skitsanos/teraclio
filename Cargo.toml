@@ -13,7 +13,7 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = { version = "4.5.48", features = ["derive"] }
+clap = { version = "4.5.49", features = ["derive"] }
 serde_json = "1.0.145"
 tera = "1.20.0"
 base64 = "0.22.1"
@@ -29,4 +29,4 @@ convert_case = "0.8"
 
 # Input format support
 serde_yaml = "0.9.34"
-toml = "0.9.7"
+toml = "0.9.8"
