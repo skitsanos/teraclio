@@ -25,7 +25,7 @@ sha1 = "0.10.6"
 sha2 = "0.10.9"
 urlencoding = "2.1.3"
 html-escape = "0.2.13"
-convert_case = "0.8"
+convert_case = "0.9"
 
 # Input format support
 serde_yaml = "0.9.34"
