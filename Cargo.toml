@@ -29,4 +29,4 @@ convert_case = "0.10.0"
 
 # Input format support
 serde_yaml = "0.9.34"
-toml = "0.9.8"
+toml = "0.9.10"
