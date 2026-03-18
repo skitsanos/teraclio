@@ -113,10 +113,7 @@ mod tests {
     fn hmac_sha256_returns_valid_hex() {
         let input = Value::String("abc".to_string());
         let mut args = HashMap::new();
-        args.insert(
-            "key".to_string(),
-            Value::String("secret".to_string()),
-        );
+        args.insert("key".to_string(), Value::String("secret".to_string()));
         let result = filter_hmac_sha256(&input, &args).unwrap();
         let hex_str = result.as_str().unwrap();
         assert_eq!(hex_str.len(), 64);

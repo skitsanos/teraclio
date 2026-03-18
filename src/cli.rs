@@ -8,10 +8,17 @@ use std::ffi::OsString;
 #[command(about = "A CLI tool for template rendering with Tera")]
 #[command(version)]
 pub struct Cli {
-    #[arg(long = "completions", value_enum, help = "Generate shell completions and exit")]
+    #[arg(
+        long = "completions",
+        value_enum,
+        help = "Generate shell completions and exit"
+    )]
     pub completions: Option<Shell>,
 
-    #[arg(long = "list-filters", help = "List all available template filters and exit")]
+    #[arg(
+        long = "list-filters",
+        help = "List all available template filters and exit"
+    )]
     pub list_filters: bool,
     #[arg(long = "template", short = 't', help = "Path to the template file or directory", required_unless_present_any = ["completions", "list_filters"])]
     pub template_path: Option<OsString>,
@@ -53,21 +60,32 @@ pub struct Cli {
     #[arg(long = "strict", help = "Fail on undefined template variables")]
     pub strict: bool,
 
-    #[arg(long = "watch", short = 'w', help = "Watch source and template files for changes and re-render")]
+    #[arg(
+        long = "watch",
+        short = 'w',
+        help = "Watch source and template files for changes and re-render"
+    )]
     pub watch: bool,
 
     #[arg(
         long = "set",
         value_name = "KEY=VALUE",
         help = "Set a template variable (can be used multiple times)",
-        num_args = 1,
+        num_args = 1
     )]
     pub set_vars: Vec<String>,
 
-    #[arg(long = "quiet", short = 'q', help = "Suppress informational messages on stderr")]
+    #[arg(
+        long = "quiet",
+        short = 'q',
+        help = "Suppress informational messages on stderr"
+    )]
     pub quiet: bool,
 
-    #[arg(long = "diff", help = "Show diff of what would change in the destination file instead of writing")]
+    #[arg(
+        long = "diff",
+        help = "Show diff of what would change in the destination file instead of writing"
+    )]
     pub diff: bool,
 
     #[arg(
@@ -77,7 +95,11 @@ pub struct Cli {
     )]
     pub output_format: Option<InputFormat>,
 
-    #[arg(long = "recursive", short = 'r', help = "Process template directories recursively")]
+    #[arg(
+        long = "recursive",
+        short = 'r',
+        help = "Process template directories recursively"
+    )]
     pub recursive: bool,
 }
 

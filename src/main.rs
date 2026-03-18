@@ -1,9 +1,9 @@
-use crate::cli::{Cli, generate_completions};
+use crate::cli::{generate_completions, Cli};
 use crate::engine::TemplateEngine;
 use crate::error::{Result, TeraclioError};
-use crate::utils::{InputFormat, parse_data_source};
+use crate::utils::{parse_data_source, InputFormat};
 use clap::Parser;
-use notify::{RecursiveMode, Watcher, recommended_watcher};
+use notify::{recommended_watcher, RecursiveMode, Watcher};
 use serde_json::Value;
 use std::ffi::OsString;
 use std::path::Path;
@@ -35,7 +35,10 @@ const AVAILABLE_FILTERS: &[(&str, &str)] = &[
     ("yaml_encode", "Serialize value to YAML"),
     // Text
     ("truncate_words", "Truncate to N words (args: count, end)"),
-    ("regex_replace", "Regex find-and-replace (args: pattern, replacement)"),
+    (
+        "regex_replace",
+        "Regex find-and-replace (args: pattern, replacement)",
+    ),
     // Case conversion
     ("snake_case", "Convert to snake_case"),
     ("kebab_case", "Convert to kebab-case"),
@@ -163,16 +166,19 @@ fn parse_data(args: &Cli) -> Result<Value> {
 fn validate_output(content: &str, format: InputFormat) -> Result<()> {
     match format {
         InputFormat::Json => {
-            serde_json::from_str::<serde_json::Value>(content)
-                .map_err(|e| TeraclioError::InvalidInput(format!("Output is not valid JSON: {e}")))?;
+            serde_json::from_str::<serde_json::Value>(content).map_err(|e| {
+                TeraclioError::InvalidInput(format!("Output is not valid JSON: {e}"))
+            })?;
         }
         InputFormat::Yaml => {
-            serde_yaml::from_str::<serde_json::Value>(content)
-                .map_err(|e| TeraclioError::InvalidInput(format!("Output is not valid YAML: {e}")))?;
+            serde_yaml::from_str::<serde_json::Value>(content).map_err(|e| {
+                TeraclioError::InvalidInput(format!("Output is not valid YAML: {e}"))
+            })?;
         }
         InputFormat::Toml => {
-            toml::from_str::<toml::Value>(content)
-                .map_err(|e| TeraclioError::InvalidInput(format!("Output is not valid TOML: {e}")))?;
+            toml::from_str::<toml::Value>(content).map_err(|e| {
+                TeraclioError::InvalidInput(format!("Output is not valid TOML: {e}"))
+            })?;
         }
     }
     Ok(())
@@ -289,7 +295,13 @@ fn process_directory(
 
         if path.is_dir() {
             if recursive {
-                process_directory(&path, &dest_dir.join(&file_name), json_data, args, recursive)?;
+                process_directory(
+                    &path,
+                    &dest_dir.join(&file_name),
+                    json_data,
+                    args,
+                    recursive,
+                )?;
             }
             continue;
         }
@@ -313,9 +325,9 @@ fn process_directory(
  * @author: skitsanos
  */
 fn require_template_path(args: &Cli) -> Result<&OsString> {
-    args.template_path.as_ref().ok_or_else(|| {
-        TeraclioError::InvalidInput("--template is required".to_string())
-    })
+    args.template_path
+        .as_ref()
+        .ok_or_else(|| TeraclioError::InvalidInput("--template is required".to_string()))
 }
 
 /**
@@ -344,7 +356,11 @@ fn run() -> Result<()> {
     // List all available filters and exit
     if args.list_filters {
         println!("Available filters ({}):\n", AVAILABLE_FILTERS.len());
-        let max_name = AVAILABLE_FILTERS.iter().map(|(n, _)| n.len()).max().unwrap_or(0);
+        let max_name = AVAILABLE_FILTERS
+            .iter()
+            .map(|(n, _)| n.len())
+            .max()
+            .unwrap_or(0);
         for (name, description) in AVAILABLE_FILTERS {
             println!("  {name:<max_name$}  {description}");
         }

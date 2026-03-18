@@ -51,10 +51,7 @@ mod tests {
     fn test_rfc3339_input() {
         let value = Value::String("2024-06-15T10:30:00+02:00".to_string());
         let mut args = HashMap::new();
-        args.insert(
-            "format".to_string(),
-            Value::String("%Y-%m-%d".to_string()),
-        );
+        args.insert("format".to_string(), Value::String("%Y-%m-%d".to_string()));
 
         let result = filter_date_format(&value, &args).unwrap();
         assert_eq!(result, Value::String("2024-06-15".to_string()));
@@ -64,10 +61,7 @@ mod tests {
     fn test_date_only_input() {
         let value = Value::String("2024-06-15".to_string());
         let mut args = HashMap::new();
-        args.insert(
-            "format".to_string(),
-            Value::String("%d/%m/%Y".to_string()),
-        );
+        args.insert("format".to_string(), Value::String("%d/%m/%Y".to_string()));
 
         let result = filter_date_format(&value, &args).unwrap();
         assert_eq!(result, Value::String("15/06/2024".to_string()));
@@ -77,10 +71,7 @@ mod tests {
     fn test_invalid_date_error() {
         let value = Value::String("not-a-date".to_string());
         let mut args = HashMap::new();
-        args.insert(
-            "format".to_string(),
-            Value::String("%Y-%m-%d".to_string()),
-        );
+        args.insert("format".to_string(), Value::String("%Y-%m-%d".to_string()));
 
         let result = filter_date_format(&value, &args);
         assert!(result.is_err());

@@ -22,8 +22,8 @@ pub fn filter_regex_replace(value: &Value, args: &HashMap<String, Value>) -> Res
         .and_then(Value::as_str)
         .ok_or_else(|| Error::msg("Missing required argument: replacement"))?;
 
-    let regex = Regex::new(pattern)
-        .map_err(|err| Error::msg(format!("Invalid regex pattern: {err}")))?;
+    let regex =
+        Regex::new(pattern).map_err(|err| Error::msg(format!("Invalid regex pattern: {err}")))?;
 
     let result = regex.replace_all(input_str, replacement);
     tera::to_value(result.as_ref())

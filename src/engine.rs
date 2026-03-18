@@ -4,8 +4,8 @@ use crate::filters::bytes::{filter_bytes_to_str, filter_str_to_bytes};
 use crate::filters::case::{
     filter_camel_case, filter_kebab_case, filter_pascal_case, filter_slug, filter_snake_case,
 };
-use crate::filters::escape::{filter_html_escape, filter_html_unescape, filter_xml_escape};
 use crate::filters::date::filter_date_format;
+use crate::filters::escape::{filter_html_escape, filter_html_unescape, filter_xml_escape};
 use crate::filters::hash::{filter_hmac_sha256, filter_md5, filter_sha1, filter_sha256};
 use crate::filters::regex::filter_regex_replace;
 use crate::filters::serialize::{filter_json_encode, filter_yaml_encode};
@@ -124,8 +124,7 @@ impl TemplateEngine {
                         }
 
                         // Silently skip files that can't be parsed as templates
-                        let _ =
-                            self.tera.add_template_file(&sibling_path, Some(&file_name));
+                        let _ = self.tera.add_template_file(&sibling_path, Some(&file_name));
                     }
                 }
             }
