@@ -66,6 +66,19 @@ pub struct Cli {
 
     #[arg(long = "quiet", short = 'q', help = "Suppress informational messages on stderr")]
     pub quiet: bool,
+
+    #[arg(long = "diff", help = "Show diff of what would change in the destination file instead of writing")]
+    pub diff: bool,
+
+    #[arg(
+        long = "output-format",
+        help = "Validate that rendered output is well-formed (json, yaml, toml)",
+        value_enum
+    )]
+    pub output_format: Option<InputFormat>,
+
+    #[arg(long = "recursive", short = 'r', help = "Process template directories recursively")]
+    pub recursive: bool,
 }
 
 /**

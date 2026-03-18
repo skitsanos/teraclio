@@ -86,7 +86,8 @@ impl TemplateEngine {
     }
 
     /**
-     * Load a template file into the engine
+     * Load a template file into the engine, registering sibling files
+     * in the same directory so that {% include "sibling.html" %} works.
      * @author: skitsanos
      */
     pub fn load_template<P: AsRef<Path>>(&mut self, template_path: P) -> Result<()> {
@@ -97,6 +98,37 @@ impl TemplateEngine {
                 "Template file does not exist: {}",
                 path.display()
             )));
+        }
+
+        // Register sibling files so Tera's {% include %} directive can find them
+        if let Some(parent) = path.parent() {
+            if parent.exists() {
+                if let Ok(entries) = std::fs::read_dir(parent) {
+                    for entry in entries.flatten() {
+                        let sibling_path = entry.path();
+
+                        if sibling_path.is_dir() {
+                            continue;
+                        }
+
+                        if sibling_path == path {
+                            continue;
+                        }
+
+                        let file_name = match sibling_path.file_name().and_then(|n| n.to_str()) {
+                            Some(name) => name.to_string(),
+                            None => continue,
+                        };
+                        if file_name.starts_with('.') {
+                            continue;
+                        }
+
+                        // Silently skip files that can't be parsed as templates
+                        let _ =
+                            self.tera.add_template_file(&sibling_path, Some(&file_name));
+                    }
+                }
+            }
         }
 
         self.tera.add_template_file(path, None)?;

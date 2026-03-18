@@ -1,7 +1,7 @@
 use crate::cli::{Cli, generate_completions};
 use crate::engine::TemplateEngine;
 use crate::error::{Result, TeraclioError};
-use crate::utils::parse_data_source;
+use crate::utils::{InputFormat, parse_data_source};
 use clap::Parser;
 use notify::{RecursiveMode, Watcher, recommended_watcher};
 use serde_json::Value;
@@ -157,6 +157,59 @@ fn parse_data(args: &Cli) -> Result<Value> {
 }
 
 /**
+ * Validate that rendered output is well-formed in the specified format
+ * @author: skitsanos
+ */
+fn validate_output(content: &str, format: InputFormat) -> Result<()> {
+    match format {
+        InputFormat::Json => {
+            serde_json::from_str::<serde_json::Value>(content)
+                .map_err(|e| TeraclioError::InvalidInput(format!("Output is not valid JSON: {e}")))?;
+        }
+        InputFormat::Yaml => {
+            serde_yaml::from_str::<serde_json::Value>(content)
+                .map_err(|e| TeraclioError::InvalidInput(format!("Output is not valid YAML: {e}")))?;
+        }
+        InputFormat::Toml => {
+            toml::from_str::<toml::Value>(content)
+                .map_err(|e| TeraclioError::InvalidInput(format!("Output is not valid TOML: {e}")))?;
+        }
+    }
+    Ok(())
+}
+
+/**
+ * Show a unified diff between the rendered output and the existing destination file
+ * @author: skitsanos
+ */
+fn show_diff(rendered: &str, dest_path: &Path, quiet: bool) -> Result<()> {
+    let existing = if dest_path.exists() {
+        std::fs::read_to_string(dest_path)?
+    } else {
+        String::new()
+    };
+
+    let diff = similar::TextDiff::from_lines(existing.as_str(), rendered);
+    let unified = diff
+        .unified_diff()
+        .header(
+            &dest_path.display().to_string(),
+            &dest_path.display().to_string(),
+        )
+        .to_string();
+
+    if unified.is_empty() {
+        if !quiet {
+            eprintln!("[teraclio] No differences found.");
+        }
+    } else {
+        print!("{unified}");
+    }
+
+    Ok(())
+}
+
+/**
  * Render template once with the given arguments
  * @author: skitsanos
  */
@@ -168,6 +221,19 @@ fn render_once(args: &Cli) -> Result<()> {
     engine.load_template(template_path)?;
 
     let rendered = engine.render(template_path, &json_data)?;
+
+    // Validate output format if specified
+    if let Some(format) = args.output_format {
+        validate_output(&rendered, format)?;
+    }
+
+    // Show diff instead of writing if --diff is set
+    if args.diff {
+        let dest_path = args.output_file.as_ref().ok_or_else(|| {
+            TeraclioError::InvalidInput("--dest is required when using --diff".to_string())
+        })?;
+        return show_diff(&rendered, Path::new(dest_path), args.quiet);
+    }
 
     let output_path = args
         .output_file
@@ -192,6 +258,21 @@ fn run_directory_mode(template_dir: &Path, args: &Cli, json_data: &Value) -> Res
         }
     };
 
+    process_directory(template_dir, dest_dir, json_data, args, args.recursive)
+}
+
+/**
+ * Recursively (or non-recursively) process a template directory, mirroring
+ * the directory structure in the destination.
+ * @author: skitsanos
+ */
+fn process_directory(
+    template_dir: &Path,
+    dest_dir: &Path,
+    json_data: &Value,
+    args: &Cli,
+    recursive: bool,
+) -> Result<()> {
     if !dest_dir.exists() {
         std::fs::create_dir_all(dest_dir)?;
     }
@@ -200,15 +281,18 @@ fn run_directory_mode(template_dir: &Path, args: &Cli, json_data: &Value) -> Res
         let entry = entry?;
         let path = entry.path();
 
-        if path.is_dir() {
-            continue;
-        }
-
         let file_name = match entry.file_name().to_str() {
             Some(name) if name.starts_with('.') => continue,
             Some(name) => name.to_string(),
             None => continue,
         };
+
+        if path.is_dir() {
+            if recursive {
+                process_directory(&path, &dest_dir.join(&file_name), json_data, args, recursive)?;
+            }
+            continue;
+        }
 
         let mut engine = TemplateEngine::new(args.strict);
         engine.load_template(&path)?;
