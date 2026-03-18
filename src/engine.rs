@@ -5,8 +5,13 @@ use crate::filters::case::{
     filter_camel_case, filter_kebab_case, filter_pascal_case, filter_slug, filter_snake_case,
 };
 use crate::filters::escape::{filter_html_escape, filter_html_unescape, filter_xml_escape};
-use crate::filters::hash::{filter_md5, filter_sha1, filter_sha256};
+use crate::filters::date::filter_date_format;
+use crate::filters::hash::{filter_hmac_sha256, filter_md5, filter_sha1, filter_sha256};
+use crate::filters::regex::filter_regex_replace;
+use crate::filters::serialize::{filter_json_encode, filter_yaml_encode};
+use crate::filters::text::filter_truncate_words;
 use crate::filters::url::{filter_url_decode, filter_url_encode};
+use crate::filters::uuid::filter_uuid;
 use serde_json::Value;
 use std::fs::File;
 use std::io::{self, Write};
@@ -41,6 +46,7 @@ impl TemplateEngine {
         tera.register_filter("md5", filter_md5);
         tera.register_filter("sha1", filter_sha1);
         tera.register_filter("sha256", filter_sha256);
+        tera.register_filter("hmac_sha256", filter_hmac_sha256);
 
         // URL filters
         tera.register_filter("url_encode", filter_url_encode);
@@ -50,6 +56,22 @@ impl TemplateEngine {
         tera.register_filter("html_escape", filter_html_escape);
         tera.register_filter("html_unescape", filter_html_unescape);
         tera.register_filter("xml_escape", filter_xml_escape);
+
+        // Serialization filters
+        tera.register_filter("json_encode", filter_json_encode);
+        tera.register_filter("yaml_encode", filter_yaml_encode);
+
+        // Regex filters
+        tera.register_filter("regex_replace", filter_regex_replace);
+
+        // Text filters
+        tera.register_filter("truncate_words", filter_truncate_words);
+
+        // Date filters
+        tera.register_filter("date_format", filter_date_format);
+
+        // UUID filter
+        tera.register_filter("uuid", filter_uuid);
 
         // Case conversion filters
         tera.register_filter("snake_case", filter_snake_case);
