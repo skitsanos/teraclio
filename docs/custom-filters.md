@@ -1,6 +1,6 @@
 # Custom Filters
 
-Teraclio extends Tera's built-in filters with 16+ custom filters organized into four main categories: Hash & Security, Web & URL, String Transformation, and Data Conversion. These filters provide comprehensive data transformation capabilities for modern template processing.
+Teraclio extends Tera's built-in filters with 24 custom filters organized into eight categories: Hash & Security, Web & URL, String Transformation, Data Conversion, Serialization, Text, Date, and UUID. These filters provide comprehensive data transformation capabilities for modern template processing.
 
 ## Hash & Security Filters
 
@@ -25,6 +25,14 @@ Generates SHA-1 hash (40 hex characters). More secure than MD5 but consider SHA-
 {{ data.sensitive_data | sha256 }}
 ```
 Generates SHA-256 hash (64 hex characters). Recommended for security-critical applications.
+
+### HMAC Signing
+
+#### `hmac_sha256`
+```jinja2
+{{ data.message | hmac_sha256(key="secret-key") }}
+```
+HMAC-SHA256 signing. Requires a `key` argument. Returns 64 hex characters.
 
 ### Base64 Encoding
 
@@ -97,6 +105,63 @@ Convert between different naming conventions.
 ```
 **Output**: `HelloWorld`
 
+### `slug`
+```jinja2
+{{ "Hello World!" | slug }}
+```
+**Output**: `hello-world`
+
+## Serialization Filters
+
+Serialize data structures into standard text formats.
+
+### `json_encode`
+```jinja2
+{{ data.config | json_encode }}
+```
+Serializes any value to pretty-printed JSON string.
+
+### `yaml_encode`
+```jinja2
+{{ data.config | yaml_encode }}
+```
+Serializes any value to YAML string.
+
+## Text Filters
+
+Advanced text manipulation filters.
+
+### `truncate_words`
+```jinja2
+{{ data.description | truncate_words(count=5) }}
+{{ data.description | truncate_words(count=5, end="—") }}
+```
+Truncates text to N words. Default suffix is "...". Optional `end` argument for custom suffix.
+
+### `regex_replace`
+```jinja2
+{{ data.text | regex_replace(pattern="\\d+", replacement="X") }}
+```
+Regex find-and-replace. Requires `pattern` and `replacement` arguments.
+
+## Date Filters
+
+Parse and reformat date strings.
+
+### `date_format`
+```jinja2
+{{ data.created_at | date_format(format="%B %d, %Y") }}
+```
+Parses dates (RFC 3339, ISO 8601, YYYY-MM-DD) and reformats using strftime format strings.
+
+## UUID Filter
+
+### `uuid`
+```jinja2
+{{ "" | uuid }}
+```
+Generates a random UUID v4. Input value is ignored.
+
 ## Data Conversion Filters
 
 Low-level data type conversions for advanced use cases.
@@ -161,6 +226,39 @@ display_name = "{{ service.name | pascal_case }}"
 {% endfor %}
 ```
 
+### Webhook Signing
+```jinja2
+{
+  "payload": "{{ data.body | json_encode }}",
+  "signature": "{{ data.body | hmac_sha256(key=data.webhook_secret) }}",
+  "request_id": "{{ "" | uuid }}",
+  "timestamp": "{{ data.sent_at | date_format(format="%Y-%m-%dT%H:%M:%SZ") }}"
+}
+```
+
+### Content Preview Card
+```jinja2
+{% for post in data.posts %}
+<article class="{{ post.category | slug }}">
+  <h2>{{ post.title | html_escape }}</h2>
+  <p>{{ post.body | truncate_words(count=25) }}</p>
+  <time>{{ post.published_at | date_format(format="%B %d, %Y") }}</time>
+</article>
+{% endfor %}
+```
+
+### Data Export Template
+```jinja2
+# Export generated on {{ data.export_date | date_format(format="%Y-%m-%d") }}
+# Request ID: {{ "" | uuid }}
+
+## Configuration
+{{ data.settings | yaml_encode }}
+
+## Sanitized Notes
+{{ data.notes | regex_replace(pattern="\\b\\d{3}-\\d{2}-\\d{4}\\b", replacement="[REDACTED]") }}
+```
+
 ## Filter Chaining & Integration
 
 All custom filters integrate seamlessly with Tera's built-in filters:
@@ -190,18 +288,26 @@ Weak password detected
 All custom filters include comprehensive error handling:
 
 - **Hash filters**: Always succeed for string inputs
+- **HMAC filters**: Require a valid `key` argument
 - **Base64 operations**: Validate input format and encoding
 - **URL operations**: Handle special characters correctly
 - **Case conversions**: Work with any Unicode string
 - **Escape filters**: Prevent injection attacks
+- **Serialization filters**: Handle any serializable value
+- **Text filters**: Validate required arguments (`count`, `pattern`, `replacement`)
+- **Date filters**: Return clear errors for unparseable date strings
+- **UUID filter**: Always succeeds; input is ignored
 
 Invalid operations will result in clear template errors with descriptive messages.
 
 ## Performance Notes
 
-- Hash operations are cryptographically secure but computationally expensive
+- Hash and HMAC operations are cryptographically secure but computationally expensive
 - Case conversions are optimized for common ASCII strings
 - URL and HTML escaping use efficient lookup tables
 - Base64 operations use standard library implementations
+- Serialization filters use standard JSON/YAML libraries
+- Regex replace compiles patterns per invocation; avoid complex patterns in tight loops
+- Date parsing attempts multiple formats in sequence
 
 For high-volume template rendering, consider caching computed hashes and avoiding repeated expensive operations in loops.

@@ -21,7 +21,7 @@ teraclio --source data.json --template template.txt
 
 - 🚀 **Fast & Lightweight** - Single binary with no dependencies
 - 📝 **Powerful Templating** - Full Tera template engine support
-- 🔧 **Extensive Filter Library** - 16+ custom filters for data transformation
+- 🔧 **Extensive Filter Library** - 24 custom filters for data transformation
 - 📊 **Multi-Format Input** - JSON, YAML, TOML with auto-detection
 - 🌍 **Cross-Platform** - Linux, macOS, Windows (Intel & ARM)
 - ⚡ **Flexible output** - File output or stdout, with input format detection
@@ -29,6 +29,11 @@ teraclio --source data.json --template template.txt
 - 🌐 **Web-Ready** - URL encoding, HTML/XML escaping
 - 🔤 **Case Conversion** - snake_case, kebab-case, camelCase, PascalCase
 - 🌍 **Environment Integration** - Access environment variables in templates
+- 📦 **Template Includes** - `{% include %}` support for reusable partials
+- 📂 **Multiple Data Sources** - Merge multiple JSON/YAML/TOML files
+- 👀 **Watch Mode** - Auto re-render on file changes
+- 📁 **Directory Mode** - Batch process template folders
+- 🐚 **Shell Completions** - bash, zsh, fish, powershell
 
 ## Documentation
 
@@ -46,18 +51,67 @@ teraclio --source <data-file> --template <template-file> [OPTIONS]
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `--source, -s` | ✅ | Data file path (JSON, YAML, TOML) or `-` to read from stdin |
-| `--template, -t` | ✅ | Tera template file |
-| `--dest, -d` | ❌ | Output file (stdout if omitted) |
-| `--format, -f` | ❌ | Input format (auto-detected from file extension; required for stdin and unknown extensions) |
+| `--source, -s` | ✅ | Data file path(s) (JSON, YAML, TOML) or `-` for stdin. Can be specified multiple times |
+| `--template, -t` | ✅ | Template file or directory path |
+| `--dest, -d` | ❌ | Output file or directory (stdout if omitted) |
+| `--format, -f` | ❌ | Input format (auto-detected; required for stdin) |
 | `--env-vars` | ❌ | Include environment variables as `data.env` |
+| `--set KEY=VALUE` | ❌ | Set template variables from CLI (repeatable) |
+| `--check` | ❌ | Validate template without rendering |
+| `--diff` | ❌ | Show diff vs destination file instead of writing |
+| `--watch, -w` | ❌ | Watch files and re-render on changes |
+| `--strict` | ❌ | Fail on undefined template variables |
+| `--output-format` | ❌ | Validate output is well-formed (json, yaml, toml) |
+| `--recursive, -r` | ❌ | Process template directories recursively |
+| `--quiet, -q` | ❌ | Suppress informational messages |
+| `--list-filters` | ❌ | List all available filters and exit |
+| `--completions` | ❌ | Generate shell completions (bash, zsh, fish, elvish, powershell) |
 
 Notes:
 - Files without a known extension are treated as JSON.
 - `--source -` reads JSON/YAML/TOML data from stdin; `--format` is required in this mode.
 - `--env-vars` requires the input data root to be an object; non-object inputs now return a clear validation error.
+- Multiple `--source` flags merge data objects, with later sources overriding earlier ones.
 
 ## Quick Examples
+
+### Multiple Sources
+```bash
+teraclio -s base.json -s overrides.json -t template.txt
+```
+
+### Set Variables from CLI
+```bash
+teraclio -s data.json -t template.txt --set version=2.0
+```
+
+### Watch Mode
+```bash
+teraclio -s data.json -t template.txt -d out.txt --watch
+```
+
+### Directory Mode
+```bash
+teraclio -s data.json -t templates/ -d output/ -r
+```
+
+### Template Includes
+```html
+{# In your template, include reusable partials #}
+{% include "header.html" %}
+<main>{{ data.content }}</main>
+{% include "footer.html" %}
+```
+
+### Diff Mode
+```bash
+teraclio -s data.json -t template.txt -d existing.txt --diff
+```
+
+### Output Validation
+```bash
+teraclio -s data.json -t config.tpl --output-format json
+```
 
 ### Simple Report Generation
 ```bash
@@ -91,18 +145,36 @@ curl -s https://api.example.com/data.json | teraclio --source - --format json -t
 
 ## Custom Filters
 
-Teraclio extends Tera with 16+ custom filters organized by category:
+Teraclio extends Tera with 24 custom filters organized by category:
 
 **Hash & Security**
-- `md5`, `sha1`, `sha256` - Generate cryptographic hashes
+- `md5`, `sha1`, `sha256`, `hmac_sha256` - Cryptographic hashes and HMAC
 - `base64_encode` / `base64_decode` - Base64 operations
 
 **Web & URL**
 - `url_encode` / `url_decode` - URL encoding/decoding
-- `html_escape` / `xml_escape` - HTML/XML entity escaping
+- `html_escape` / `html_unescape` - HTML entity escaping/unescaping
+- `xml_escape` - XML entity escaping
 
-**String Transformation**
+**Serialization**
+- `json_encode` - Serialize values to JSON strings
+- `yaml_encode` - Serialize values to YAML strings
+
+**Text**
+- `truncate_words` - Truncate text to a specified number of words
+- `regex_replace` - Replace text matching a regular expression
+
+**String Case**
 - `snake_case`, `kebab_case`, `camel_case`, `pascal_case` - Case conversions
+- `slug` - URL-friendly slug generation
+
+**Date**
+- `date_format` - Format date strings with custom patterns
+
+**UUID**
+- `uuid` - Generate unique identifiers
+
+**Data Conversion**
 - `bytes_to_str` / `str_to_bytes` - Bytes/string conversion
 
 See [Custom Filters Documentation](docs/custom-filters.md) for complete details and examples.
