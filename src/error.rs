@@ -6,6 +6,7 @@ pub enum TeraclioError {
     JsonError(serde_json::Error),
     TemplateError(tera::Error),
     InvalidInput(String),
+    WatchError(String),
 }
 
 impl fmt::Display for TeraclioError {
@@ -15,6 +16,7 @@ impl fmt::Display for TeraclioError {
             TeraclioError::JsonError(err) => write!(f, "JSON parsing error: {err}"),
             TeraclioError::TemplateError(err) => write!(f, "Template error: {err}"),
             TeraclioError::InvalidInput(msg) => write!(f, "Invalid input: {msg}"),
+            TeraclioError::WatchError(msg) => write!(f, "Watch error: {msg}"),
         }
     }
 }
@@ -26,6 +28,7 @@ impl std::error::Error for TeraclioError {
             TeraclioError::JsonError(err) => Some(err),
             TeraclioError::TemplateError(err) => Some(err),
             TeraclioError::InvalidInput(_) => None,
+            TeraclioError::WatchError(_) => None,
         }
     }
 }
@@ -45,6 +48,12 @@ impl From<serde_json::Error> for TeraclioError {
 impl From<tera::Error> for TeraclioError {
     fn from(error: tera::Error) -> Self {
         TeraclioError::TemplateError(error)
+    }
+}
+
+impl From<notify::Error> for TeraclioError {
+    fn from(error: notify::Error) -> Self {
+        TeraclioError::WatchError(format!("File watch error: {error}"))
     }
 }
 

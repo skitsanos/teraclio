@@ -24,6 +24,8 @@ use tera::{Context, Tera};
  */
 pub struct TemplateEngine {
     tera: Tera,
+    #[allow(dead_code)]
+    strict: bool,
 }
 
 impl TemplateEngine {
@@ -31,7 +33,7 @@ impl TemplateEngine {
      * Create a new TemplateEngine instance with registered filters
      * @author: skitsanos
      */
-    pub fn new() -> Self {
+    pub fn new(strict: bool) -> Self {
         let mut tera = Tera::default();
 
         // Base64 filters
@@ -80,7 +82,7 @@ impl TemplateEngine {
         tera.register_filter("pascal_case", filter_pascal_case);
         tera.register_filter("slug", filter_slug);
 
-        Self { tera }
+        Self { tera, strict }
     }
 
     /**

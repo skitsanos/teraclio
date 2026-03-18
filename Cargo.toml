@@ -31,6 +31,9 @@ regex = "1"
 chrono = "0.4"
 uuid = { version = "1", features = ["v4"] }
 
+# File watching
+notify = "7"
+
 # Input format support
 serde_yaml = "0.9.34"
 toml = "1.0.6"

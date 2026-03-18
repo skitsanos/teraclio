@@ -7,13 +7,13 @@ use std::ffi::OsString;
 #[command(about = "A CLI tool for template rendering with Tera")]
 #[command(version)]
 pub struct Cli {
-    #[arg(long = "template", short = 't', help = "Path to the template file")]
+    #[arg(long = "template", short = 't', help = "Path to the template file or directory")]
     pub template_path: OsString,
 
     #[arg(
         long = "dest",
         short = 'd',
-        help = "Output file path (stdout if not specified)"
+        help = "Output file path (stdout if not specified), or directory when using directory mode"
     )]
     pub output_file: Option<OsString>,
 
@@ -21,9 +21,11 @@ pub struct Cli {
         long = "source",
         short = 's',
         allow_hyphen_values = true,
-        help = "Path to the data source file (JSON, YAML, or TOML), or '-' for stdin"
+        help = "Path to data source file(s) (JSON, YAML, or TOML), or '-' for stdin. Can be specified multiple times.",
+        num_args = 1,
+        required = true,
     )]
-    pub json_source: String,
+    pub json_source: Vec<String>,
 
     #[arg(
         long = "format",
@@ -38,4 +40,21 @@ pub struct Cli {
         help = "Include environment variables in template data as 'env' object"
     )]
     pub include_env_vars: bool,
+
+    #[arg(long = "check", help = "Validate the template without rendering")]
+    pub check: bool,
+
+    #[arg(long = "strict", help = "Fail on undefined template variables")]
+    pub strict: bool,
+
+    #[arg(long = "watch", short = 'w', help = "Watch source and template files for changes and re-render")]
+    pub watch: bool,
+
+    #[arg(
+        long = "set",
+        value_name = "KEY=VALUE",
+        help = "Set a template variable (can be used multiple times)",
+        num_args = 1,
+    )]
+    pub set_vars: Vec<String>,
 }
