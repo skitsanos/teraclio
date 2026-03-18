@@ -8,9 +8,12 @@ use urlencoding;
  * @author: skitsanos
  */
 pub fn filter_url_encode(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
-    let input_str = value.as_str().unwrap_or("");
+    let input_str = value
+        .as_str()
+        .ok_or_else(|| Error::msg("Invalid input: expected a string for url_encode"))?;
     let encoded = urlencoding::encode(input_str);
-    Ok(tera::to_value(encoded.into_owned()).unwrap())
+    tera::to_value(encoded.into_owned())
+        .map_err(|err| Error::msg(format!("Failed to serialize encoded value: {err}")))
 }
 
 /**
@@ -18,9 +21,12 @@ pub fn filter_url_encode(value: &Value, _args: &HashMap<String, Value>) -> Resul
  * @author: skitsanos
  */
 pub fn filter_url_decode(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
-    let input_str = value.as_str().unwrap_or("");
+    let input_str = value
+        .as_str()
+        .ok_or_else(|| Error::msg("Invalid input: expected a string for url_decode"))?;
     match urlencoding::decode(input_str) {
-        Ok(decoded) => Ok(tera::to_value(decoded.into_owned()).unwrap()),
+        Ok(decoded) => tera::to_value(decoded.into_owned())
+            .map_err(|err| Error::msg(format!("Failed to serialize decoded value: {err}"))),
         Err(_) => Err(Error::msg("Failed to decode URL: invalid encoding")),
     }
 }

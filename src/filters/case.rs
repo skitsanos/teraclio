@@ -8,9 +8,11 @@ use tera::Error;
  * @author: skitsanos
  */
 pub fn filter_snake_case(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
-    let input_str = value.as_str().unwrap_or("");
+    let input_str = value
+        .as_str()
+        .ok_or_else(|| Error::msg("Invalid input: expected a string for snake_case"))?;
     let converted = input_str.to_case(Case::Snake);
-    Ok(tera::to_value(converted).unwrap())
+    tera::to_value(converted).map_err(|err| Error::msg(format!("Failed to serialize value: {err}")))
 }
 
 /**
@@ -18,9 +20,11 @@ pub fn filter_snake_case(value: &Value, _args: &HashMap<String, Value>) -> Resul
  * @author: skitsanos
  */
 pub fn filter_kebab_case(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
-    let input_str = value.as_str().unwrap_or("");
+    let input_str = value
+        .as_str()
+        .ok_or_else(|| Error::msg("Invalid input: expected a string for kebab_case"))?;
     let converted = input_str.to_case(Case::Kebab);
-    Ok(tera::to_value(converted).unwrap())
+    tera::to_value(converted).map_err(|err| Error::msg(format!("Failed to serialize value: {err}")))
 }
 
 /**
@@ -28,9 +32,11 @@ pub fn filter_kebab_case(value: &Value, _args: &HashMap<String, Value>) -> Resul
  * @author: skitsanos
  */
 pub fn filter_camel_case(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
-    let input_str = value.as_str().unwrap_or("");
+    let input_str = value
+        .as_str()
+        .ok_or_else(|| Error::msg("Invalid input: expected a string for camel_case"))?;
     let converted = input_str.to_case(Case::Camel);
-    Ok(tera::to_value(converted).unwrap())
+    tera::to_value(converted).map_err(|err| Error::msg(format!("Failed to serialize value: {err}")))
 }
 
 /**
@@ -38,9 +44,11 @@ pub fn filter_camel_case(value: &Value, _args: &HashMap<String, Value>) -> Resul
  * @author: skitsanos
  */
 pub fn filter_pascal_case(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
-    let input_str = value.as_str().unwrap_or("");
+    let input_str = value
+        .as_str()
+        .ok_or_else(|| Error::msg("Invalid input: expected a string for pascal_case"))?;
     let converted = input_str.to_case(Case::Pascal);
-    Ok(tera::to_value(converted).unwrap())
+    tera::to_value(converted).map_err(|err| Error::msg(format!("Failed to serialize value: {err}")))
 }
 
 /**
@@ -48,7 +56,9 @@ pub fn filter_pascal_case(value: &Value, _args: &HashMap<String, Value>) -> Resu
  * @author: skitsanos
  */
 pub fn filter_slug(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
-    let input_str = value.as_str().unwrap_or("");
+    let input_str = value
+        .as_str()
+        .ok_or_else(|| Error::msg("Invalid input: expected a string for slug"))?;
     let converted = input_str.to_case(Case::Kebab).to_lowercase();
-    Ok(tera::to_value(converted).unwrap())
+    tera::to_value(converted).map_err(|err| Error::msg(format!("Failed to serialize value: {err}")))
 }

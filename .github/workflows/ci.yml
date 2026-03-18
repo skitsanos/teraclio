@@ -45,10 +45,13 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Run tests
         run: cargo test --verbose
+
+      - name: Run CLI end-to-end smoke tests
+        run: ./scripts/e2e-teraclio.sh
 
       - name: Check documentation
         run: cargo doc --no-deps --document-private-items

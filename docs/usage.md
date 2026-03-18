@@ -12,10 +12,10 @@ teraclio --source <data-file> --template <template-file> [OPTIONS]
 
 | Argument | Short | Required | Description |
 |----------|-------|----------|-------------|
-| `--source` | `-s` | ✅ Yes | Path to data file (JSON, YAML, TOML) |
+| `--source` | `-s` | ✅ Yes | Path to data file (JSON, YAML, TOML) or `-` to read from stdin |
 | `--template` | `-t` | ✅ Yes | Path to Tera template file |
 | `--dest` | `-d` | ❌ No | Output file path (stdout if omitted) |
-| `--format` | `-f` | ❌ No | Input format (json, yaml, toml) - auto-detected from extension |
+| `--format` | `-f` | ❌ No | Input format (json, yaml, toml) - auto-detected from file extension, required when reading from stdin |
 | `--env-vars` | - | ❌ No | Include environment variables as `data.env` object |
 
 ### Examples
@@ -42,6 +42,11 @@ teraclio -s config.toml -t template.txt
 
 # Explicit format specification
 teraclio -s data.txt -t template.txt --format yaml
+```
+
+#### Reading from stdin
+```bash
+curl -s https://example.com/data.json | teraclio --source - --format json -t template.txt
 ```
 
 #### Environment Variables Integration
@@ -154,7 +159,8 @@ Teraclio provides clear error messages for common issues:
 - **Invalid format**: `YAML parsing error: expected value at line 1 column 1`  
 - **Template error**: `Template error: Variable 'missing_var' not found`
 - **Invalid template**: `Template file does not exist: /path/to/template.txt`
-- **Unsupported format**: `Unsupported format: xml (supported: json, yaml, toml)`
+- **Unsupported format**: `Unsupported input format for file '...' Supported formats: json, yaml, toml`
+- **Stdin without format**: `When reading from stdin, --format must be specified (json, yaml, or toml)`
 
 ## Advanced Usage Patterns
 

@@ -7,7 +7,6 @@
 # Rust
 /target/
 **/*.rs.bk
-Cargo.lock
 
 # OS
 .DS_Store

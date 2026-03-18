@@ -1,6 +1,6 @@
 use crate::cli::Cli;
 use crate::engine::TemplateEngine;
-use crate::error::Result;
+use crate::error::{Result, TeraclioError};
 use crate::utils::parse_data_source;
 use clap::Parser;
 use serde_json::Value;
@@ -30,7 +30,7 @@ fn main() -> Result<()> {
 fn run() -> Result<()> {
     let args = Cli::parse();
 
-    let mut json_data = parse_data_source(&args.json_source, args.input_format.as_deref())?;
+    let mut json_data = parse_data_source(&args.json_source, args.input_format)?;
 
     // Add environment variables if requested
     if args.include_env_vars {
@@ -39,6 +39,11 @@ fn run() -> Result<()> {
                 .map(|(k, v)| (k, Value::String(v)))
                 .collect();
             map.insert("env".to_string(), Value::Object(env_vars));
+        } else {
+            return Err(TeraclioError::InvalidInput(
+                "Cannot include environment variables: data source must be a JSON object when --env-vars is used."
+                    .to_string(),
+            ));
         }
     }
 

@@ -46,10 +46,10 @@ teraclio --source <data-file> --template <template-file> [OPTIONS]
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `--source, -s` | ✅ | Data file (JSON, YAML, TOML) |
+| `--source, -s` | ✅ | Data file path (JSON, YAML, TOML) or `-` to read from stdin |
 | `--template, -t` | ✅ | Tera template file |
 | `--dest, -d` | ❌ | Output file (stdout if omitted) |
-| `--format, -f` | ❌ | Input format (auto-detected from extension) |
+| `--format, -f` | ❌ | Input format (auto-detected from file extension; required for stdin) |
 | `--env-vars` | ❌ | Include environment variables as `data.env` |
 
 ## Quick Examples

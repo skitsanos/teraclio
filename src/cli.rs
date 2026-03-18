@@ -1,6 +1,6 @@
+use crate::utils::InputFormat;
 use clap::Parser;
 use std::ffi::OsString;
-use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "teraclio")]
@@ -20,16 +20,18 @@ pub struct Cli {
     #[arg(
         long = "source",
         short = 's',
-        help = "Path to the data source file (JSON, YAML, or TOML)"
+        allow_hyphen_values = true,
+        help = "Path to the data source file (JSON, YAML, or TOML), or '-' for stdin"
     )]
-    pub json_source: PathBuf,
+    pub json_source: String,
 
     #[arg(
         long = "format",
         short = 'f',
-        help = "Input format (json, yaml, toml) - auto-detected if not specified"
+        help = "Input format (json, yaml, toml) - auto-detected for files, required for stdin",
+        value_enum
     )]
-    pub input_format: Option<String>,
+    pub input_format: Option<InputFormat>,
 
     #[arg(
         long = "env-vars",
