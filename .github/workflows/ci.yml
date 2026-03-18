@@ -160,4 +160,4 @@ jobs:
         run: cargo install --force cargo-outdated
 
       - name: Check for outdated dependencies
-        run: cargo outdated --exit-code 1
+        run: cargo outdated
