@@ -16,33 +16,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Create Release
+      - name: Create Release (if not exists)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create ${{ github.ref_name }} \
-            --title "Release ${{ github.ref_name }}" \
-            --notes "## Changes
-          
-          - Updated dependencies to latest versions
-          - Migrated from structopt to clap 4.x
-          - Improved error handling and validation
-          - Enhanced CLI interface with better help messages
-          - Added comprehensive custom filters documentation
-          
-          ## Installation
-          
-          Download the appropriate binary for your platform below.
-          
-          ## Usage
-          
-          \`\`\`bash
-          # Output to file
-          teraclio --source data.json --template template.txt --dest output.txt
-          
-          # Output to stdout
-          teraclio --source data.json --template template.txt
-          \`\`\`"
+          if gh release view ${{ github.ref_name }} > /dev/null 2>&1; then
+            echo "Release ${{ github.ref_name }} already exists, skipping creation."
+          else
+            gh release create ${{ github.ref_name }} \
+              --title "Release ${{ github.ref_name }}" \
+              --generate-notes
+          fi
 
   build-release:
     name: Build Release (${{ matrix.os }})
