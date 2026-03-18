@@ -1,5 +1,6 @@
 use crate::utils::InputFormat;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::Shell;
 use std::ffi::OsString;
 
 #[derive(Parser)]
@@ -7,8 +8,13 @@ use std::ffi::OsString;
 #[command(about = "A CLI tool for template rendering with Tera")]
 #[command(version)]
 pub struct Cli {
-    #[arg(long = "template", short = 't', help = "Path to the template file or directory")]
-    pub template_path: OsString,
+    #[arg(long = "completions", value_enum, help = "Generate shell completions and exit")]
+    pub completions: Option<Shell>,
+
+    #[arg(long = "list-filters", help = "List all available template filters and exit")]
+    pub list_filters: bool,
+    #[arg(long = "template", short = 't', help = "Path to the template file or directory", required_unless_present_any = ["completions", "list_filters"])]
+    pub template_path: Option<OsString>,
 
     #[arg(
         long = "dest",
@@ -23,7 +29,7 @@ pub struct Cli {
         allow_hyphen_values = true,
         help = "Path to data source file(s) (JSON, YAML, or TOML), or '-' for stdin. Can be specified multiple times.",
         num_args = 1,
-        required = true,
+        required_unless_present_any = ["completions", "list_filters"],
     )]
     pub json_source: Vec<String>,
 
@@ -57,4 +63,16 @@ pub struct Cli {
         num_args = 1,
     )]
     pub set_vars: Vec<String>,
+
+    #[arg(long = "quiet", short = 'q', help = "Suppress informational messages on stderr")]
+    pub quiet: bool,
+}
+
+/**
+ * Generate shell completions and write to stdout
+ * @author: skitsanos
+ */
+pub fn generate_completions(shell: Shell) {
+    let mut cmd = Cli::command();
+    clap_complete::generate(shell, &mut cmd, "teraclio", &mut std::io::stdout());
 }

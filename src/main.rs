@@ -1,10 +1,11 @@
-use crate::cli::Cli;
+use crate::cli::{Cli, generate_completions};
 use crate::engine::TemplateEngine;
 use crate::error::{Result, TeraclioError};
 use crate::utils::parse_data_source;
 use clap::Parser;
 use notify::{RecursiveMode, Watcher, recommended_watcher};
 use serde_json::Value;
+use std::ffi::OsString;
 use std::path::Path;
 use std::sync::mpsc;
 
@@ -13,6 +14,42 @@ mod engine;
 mod error;
 mod filters;
 mod utils;
+
+const AVAILABLE_FILTERS: &[(&str, &str)] = &[
+    // Hash & Security
+    ("md5", "Generate MD5 hash"),
+    ("sha1", "Generate SHA-1 hash"),
+    ("sha256", "Generate SHA-256 hash"),
+    ("hmac_sha256", "HMAC-SHA256 signing (arg: key)"),
+    // Encoding
+    ("base64_encode", "Encode to base64"),
+    ("base64_decode", "Decode from base64"),
+    ("url_encode", "URL-encode a string"),
+    ("url_decode", "URL-decode a string"),
+    // Escape
+    ("html_escape", "Escape HTML entities"),
+    ("html_unescape", "Unescape HTML entities"),
+    ("xml_escape", "Escape XML special characters"),
+    // Serialization
+    ("json_encode", "Serialize value to pretty JSON"),
+    ("yaml_encode", "Serialize value to YAML"),
+    // Text
+    ("truncate_words", "Truncate to N words (args: count, end)"),
+    ("regex_replace", "Regex find-and-replace (args: pattern, replacement)"),
+    // Case conversion
+    ("snake_case", "Convert to snake_case"),
+    ("kebab_case", "Convert to kebab-case"),
+    ("camel_case", "Convert to camelCase"),
+    ("pascal_case", "Convert to PascalCase"),
+    ("slug", "Convert to URL-friendly slug"),
+    // Date
+    ("date_format", "Parse and reformat dates (arg: format)"),
+    // UUID
+    ("uuid", "Generate a UUID v4"),
+    // Bytes
+    ("bytes_to_str", "Convert byte array to string"),
+    ("str_to_bytes", "Convert string to byte array"),
+];
 
 /**
  * Teraclio - CLI tool for template rendering with Tera
@@ -125,11 +162,12 @@ fn parse_data(args: &Cli) -> Result<Value> {
  */
 fn render_once(args: &Cli) -> Result<()> {
     let json_data = parse_data(args)?;
+    let template_path = require_template_path(args)?;
 
     let mut engine = TemplateEngine::new(args.strict);
-    engine.load_template(&args.template_path)?;
+    engine.load_template(template_path)?;
 
-    let rendered = engine.render(&args.template_path, &json_data)?;
+    let rendered = engine.render(template_path, &json_data)?;
 
     let output_path = args
         .output_file
@@ -180,10 +218,30 @@ fn run_directory_mode(template_dir: &Path, args: &Cli, json_data: &Value) -> Res
         let output_path = dest_dir.join(&file_name);
         TemplateEngine::write_output(&rendered, Some(&output_path))?;
 
-        eprintln!("[teraclio] Rendered: {file_name}");
+        info(args, &format!("[teraclio] Rendered: {file_name}"));
     }
 
     Ok(())
+}
+
+/**
+ * Get the required template path from CLI args
+ * @author: skitsanos
+ */
+fn require_template_path(args: &Cli) -> Result<&OsString> {
+    args.template_path.as_ref().ok_or_else(|| {
+        TeraclioError::InvalidInput("--template is required".to_string())
+    })
+}
+
+/**
+ * Print a message to stderr unless --quiet is set
+ * @author: skitsanos
+ */
+fn info(args: &Cli, msg: &str) {
+    if !args.quiet {
+        eprintln!("{msg}");
+    }
 }
 
 /**
@@ -193,7 +251,24 @@ fn run_directory_mode(template_dir: &Path, args: &Cli, json_data: &Value) -> Res
 fn run() -> Result<()> {
     let args = Cli::parse();
 
-    let template_path = Path::new(&args.template_path);
+    // Generate shell completions and exit
+    if let Some(shell) = args.completions {
+        generate_completions(shell);
+        return Ok(());
+    }
+
+    // List all available filters and exit
+    if args.list_filters {
+        println!("Available filters ({}):\n", AVAILABLE_FILTERS.len());
+        let max_name = AVAILABLE_FILTERS.iter().map(|(n, _)| n.len()).max().unwrap_or(0);
+        for (name, description) in AVAILABLE_FILTERS {
+            println!("  {name:<max_name$}  {description}");
+        }
+        return Ok(());
+    }
+
+    let template_path_os = require_template_path(&args)?;
+    let template_path = Path::new(template_path_os);
 
     // Directory mode: process all files in the template directory
     if template_path.is_dir() {
@@ -205,8 +280,8 @@ fn run() -> Result<()> {
     if args.check {
         let _json_data = parse_data(&args)?;
         let mut engine = TemplateEngine::new(args.strict);
-        engine.load_template(&args.template_path)?;
-        eprintln!("Template is valid.");
+        engine.load_template(template_path_os)?;
+        info(&args, "Template is valid.");
         return Ok(());
     }
 
@@ -223,11 +298,11 @@ fn run() -> Result<()> {
             }
         }
 
-        let template_str = args.template_path.to_str().ok_or_else(|| {
+        let template_str = template_path_os.to_str().ok_or_else(|| {
             TeraclioError::InvalidInput("Template path is not valid UTF-8.".to_string())
         })?;
 
-        eprintln!("[teraclio] Watching for changes...");
+        info(&args, "[teraclio] Watching for changes...");
 
         let (tx, rx) = mpsc::channel();
         let mut watcher = recommended_watcher(tx)?;
@@ -240,7 +315,7 @@ fn run() -> Result<()> {
             match rx.recv() {
                 Ok(Ok(event)) => {
                     if event.kind.is_modify() {
-                        eprintln!("[teraclio] Detected change, re-rendering...");
+                        info(&args, "[teraclio] Detected change, re-rendering...");
                         if let Err(e) = render_once(&args) {
                             eprintln!("[teraclio] Re-render error: {e}");
                         }
