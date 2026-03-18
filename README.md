@@ -24,7 +24,7 @@ teraclio --source data.json --template template.txt
 - 🔧 **Extensive Filter Library** - 16+ custom filters for data transformation
 - 📊 **Multi-Format Input** - JSON, YAML, TOML with auto-detection
 - 🌍 **Cross-Platform** - Linux, macOS, Windows (Intel & ARM)
-- ⚡ **Flexible Output** - File output or stdout with format detection
+- ⚡ **Flexible output** - File output or stdout, with input format detection
 - 🔒 **Security Filters** - Hash generation (MD5, SHA1, SHA256)
 - 🌐 **Web-Ready** - URL encoding, HTML/XML escaping
 - 🔤 **Case Conversion** - snake_case, kebab-case, camelCase, PascalCase
@@ -49,8 +49,13 @@ teraclio --source <data-file> --template <template-file> [OPTIONS]
 | `--source, -s` | ✅ | Data file path (JSON, YAML, TOML) or `-` to read from stdin |
 | `--template, -t` | ✅ | Tera template file |
 | `--dest, -d` | ❌ | Output file (stdout if omitted) |
-| `--format, -f` | ❌ | Input format (auto-detected from file extension; required for stdin) |
+| `--format, -f` | ❌ | Input format (auto-detected from file extension; required for stdin and unknown extensions) |
 | `--env-vars` | ❌ | Include environment variables as `data.env` |
+
+Notes:
+- Files without a known extension are treated as JSON.
+- `--source -` reads JSON/YAML/TOML data from stdin; `--format` is required in this mode.
+- `--env-vars` requires the input data root to be an object; non-object inputs now return a clear validation error.
 
 ## Quick Examples
 
@@ -77,6 +82,11 @@ echo '{"message": "Hello World"}' > data.json
 echo '{{ data.message | base64_encode }}' > encode.txt
 teraclio -s data.json -t encode.txt
 # Output: SGVsbG8gV29ybGQ=
+```
+
+### Piping data into Teraclio
+```bash
+curl -s https://api.example.com/data.json | teraclio --source - --format json -t template.txt
 ```
 
 ## Custom Filters
