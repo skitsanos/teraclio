@@ -34,7 +34,7 @@ chrono = "0.4"
 uuid = { version = "1", features = ["v4"] }
 
 # File watching
-notify = "7"
+notify = "8.2.0"
 
 # Input format support
 serde_yaml = "0.9.34"
