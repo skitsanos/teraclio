@@ -31,7 +31,7 @@ convert_case = "0.11.0"
 regex = "1.12.3"
 similar = "2.7.0"
 chrono = "0.4.44"
-uuid = { version = "1.22.0", features = ["v4"] }
+uuid = { version = "1.23.0", features = ["v4"] }
 
 # File watching
 notify = "8.2.0"
