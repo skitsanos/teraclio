@@ -22,7 +22,7 @@ anyhow = "1.0.102"
 
 # Additional filters
 md5 = "0.8"
-sha1 = "0.10.6"
+sha1 = "0.11.0"
 sha2 = "0.11.0"
 hmac = { version = "0.12.1", features = ["std"] }
 urlencoding = "2.1.3"
