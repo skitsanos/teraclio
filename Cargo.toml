@@ -38,4 +38,4 @@ notify = "8.2.0"
 
 # Input format support
 serde_yaml = "0.9.34"
-toml = "1.0.7"
+toml = "1.1.0"
