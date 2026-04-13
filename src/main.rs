@@ -215,6 +215,38 @@ fn show_diff(rendered: &str, dest_path: &Path, quiet: bool) -> Result<()> {
     Ok(())
 }
 
+fn handle_rendered_output(rendered: &str, output_path: Option<&Path>, args: &Cli) -> Result<()> {
+    if let Some(format) = args.output_format {
+        validate_output(rendered, format)?;
+    }
+
+    if args.check {
+        return Ok(());
+    }
+
+    if args.diff {
+        let dest_path = output_path.ok_or_else(|| {
+            TeraclioError::InvalidInput("--dest is required when using --diff".to_string())
+        })?;
+        return show_diff(rendered, dest_path, args.quiet);
+    }
+
+    TemplateEngine::write_output(rendered, output_path)?;
+    Ok(())
+}
+
+fn render_template(
+    template_path: &Path,
+    json_data: &Value,
+    output_path: Option<&Path>,
+    args: &Cli,
+) -> Result<()> {
+    let mut engine = TemplateEngine::new(args.strict);
+    engine.load_template(template_path)?;
+    let rendered = engine.render(template_path, json_data)?;
+    handle_rendered_output(&rendered, output_path, args)
+}
+
 /**
  * Render template once with the given arguments
  * @author: skitsanos
@@ -222,32 +254,11 @@ fn show_diff(rendered: &str, dest_path: &Path, quiet: bool) -> Result<()> {
 fn render_once(args: &Cli) -> Result<()> {
     let json_data = parse_data(args)?;
     let template_path = require_template_path(args)?;
-
-    let mut engine = TemplateEngine::new(args.strict);
-    engine.load_template(template_path)?;
-
-    let rendered = engine.render(template_path, &json_data)?;
-
-    // Validate output format if specified
-    if let Some(format) = args.output_format {
-        validate_output(&rendered, format)?;
-    }
-
-    // Show diff instead of writing if --diff is set
-    if args.diff {
-        let dest_path = args.output_file.as_ref().ok_or_else(|| {
-            TeraclioError::InvalidInput("--dest is required when using --diff".to_string())
-        })?;
-        return show_diff(&rendered, Path::new(dest_path), args.quiet);
-    }
-
     let output_path = args
         .output_file
         .as_ref()
         .map(|p| p.as_ref() as &std::path::Path);
-    TemplateEngine::write_output(&rendered, output_path)?;
-
-    Ok(())
+    render_template(Path::new(template_path), &json_data, output_path, args)
 }
 
 /**
@@ -255,16 +266,20 @@ fn render_once(args: &Cli) -> Result<()> {
  * @author: skitsanos
  */
 fn run_directory_mode(template_dir: &Path, args: &Cli, json_data: &Value) -> Result<()> {
-    let dest_dir = match &args.output_file {
-        Some(dest) => Path::new(dest),
-        None => {
-            return Err(TeraclioError::InvalidInput(
-                "--dest is required when using directory mode".to_string(),
-            ));
-        }
-    };
+    let dest_dir = args.output_file.as_ref().map(Path::new);
+    if !args.check && dest_dir.is_none() {
+        return Err(TeraclioError::InvalidInput(
+            "--dest is required when using directory mode".to_string(),
+        ));
+    }
 
-    process_directory(template_dir, dest_dir, json_data, args, args.recursive)
+    process_directory(
+        template_dir,
+        dest_dir.map(Path::to_path_buf),
+        json_data,
+        args,
+        args.recursive,
+    )
 }
 
 /**
@@ -274,13 +289,15 @@ fn run_directory_mode(template_dir: &Path, args: &Cli, json_data: &Value) -> Res
  */
 fn process_directory(
     template_dir: &Path,
-    dest_dir: &Path,
+    dest_dir: Option<std::path::PathBuf>,
     json_data: &Value,
     args: &Cli,
     recursive: bool,
 ) -> Result<()> {
-    if !dest_dir.exists() {
-        std::fs::create_dir_all(dest_dir)?;
+    if let Some(dest_dir) = &dest_dir {
+        if !args.check && !args.diff && !dest_dir.exists() {
+            std::fs::create_dir_all(dest_dir)?;
+        }
     }
 
     for entry in std::fs::read_dir(template_dir)? {
@@ -297,7 +314,7 @@ fn process_directory(
             if recursive {
                 process_directory(
                     &path,
-                    &dest_dir.join(&file_name),
+                    dest_dir.as_ref().map(|dir| dir.join(&file_name)),
                     json_data,
                     args,
                     recursive,
@@ -306,18 +323,24 @@ fn process_directory(
             continue;
         }
 
-        let mut engine = TemplateEngine::new(args.strict);
-        engine.load_template(&path)?;
-
-        let rendered = engine.render(&path, json_data)?;
-
-        let output_path = dest_dir.join(&file_name);
-        TemplateEngine::write_output(&rendered, Some(&output_path))?;
-
-        info(args, &format!("[teraclio] Rendered: {file_name}"));
+        let output_path = dest_dir.as_ref().map(|dir| dir.join(&file_name));
+        render_template(&path, json_data, output_path.as_deref(), args)?;
+        info(args, &format!("[teraclio] Processed: {file_name}"));
     }
 
     Ok(())
+}
+
+fn execute(args: &Cli) -> Result<()> {
+    let template_path_os = require_template_path(args)?;
+    let template_path = Path::new(template_path_os);
+
+    if template_path.is_dir() {
+        let json_data = parse_data(args)?;
+        return run_directory_mode(template_path, args, &json_data);
+    }
+
+    render_once(args)
 }
 
 /**
@@ -370,23 +393,10 @@ fn run() -> Result<()> {
     let template_path_os = require_template_path(&args)?;
     let template_path = Path::new(template_path_os);
 
-    // Directory mode: process all files in the template directory
-    if template_path.is_dir() {
-        let json_data = parse_data(&args)?;
-        return run_directory_mode(template_path, &args, &json_data);
-    }
-
-    // Check mode: validate template and data without rendering
+    execute(&args)?;
     if args.check {
-        let _json_data = parse_data(&args)?;
-        let mut engine = TemplateEngine::new(args.strict);
-        engine.load_template(template_path_os)?;
-        info(&args, "Template is valid.");
-        return Ok(());
+        info(&args, "Template render check passed.");
     }
-
-    // Perform the initial render
-    render_once(&args)?;
 
     // If watch mode is enabled, enter the watch loop
     if args.watch {
@@ -406,7 +416,19 @@ fn run() -> Result<()> {
 
         let (tx, rx) = mpsc::channel();
         let mut watcher = recommended_watcher(tx)?;
-        watcher.watch(Path::new(template_str), RecursiveMode::NonRecursive)?;
+        if template_path.is_dir() {
+            watcher.watch(
+                Path::new(template_str),
+                if args.recursive {
+                    RecursiveMode::Recursive
+                } else {
+                    RecursiveMode::NonRecursive
+                },
+            )?;
+        } else {
+            let watch_root = template_path.parent().unwrap_or_else(|| Path::new("."));
+            watcher.watch(watch_root, RecursiveMode::NonRecursive)?;
+        }
         for source in &args.json_source {
             watcher.watch(Path::new(source.as_str()), RecursiveMode::NonRecursive)?;
         }
@@ -416,7 +438,7 @@ fn run() -> Result<()> {
                 Ok(Ok(event)) => {
                     if event.kind.is_modify() {
                         info(&args, "[teraclio] Detected change, re-rendering...");
-                        if let Err(e) = render_once(&args) {
+                        if let Err(e) = execute(&args) {
                             eprintln!("[teraclio] Re-render error: {e}");
                         }
                     }

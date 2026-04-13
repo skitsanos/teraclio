@@ -1,4 +1,4 @@
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use serde_json::Value;
 use sha1::Sha1;
 use sha2::{Digest, Sha256};
@@ -6,6 +6,10 @@ use std::collections::HashMap;
 use tera::Error;
 
 type HmacSha256 = Hmac<Sha256>;
+
+fn to_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
 
 /**
  * MD5 hash filter for Tera templates
@@ -32,7 +36,7 @@ pub fn filter_sha1(value: &Value, _args: &HashMap<String, Value>) -> Result<Valu
     let mut hasher = Sha1::new();
     Digest::update(&mut hasher, input_str.as_bytes());
     let result = hasher.finalize();
-    let hash_string = format!("{result:x}");
+    let hash_string = to_hex(&result);
     tera::to_value(hash_string)
         .map_err(|err| Error::msg(format!("Failed to serialize hash value: {err}")))
 }
@@ -48,7 +52,7 @@ pub fn filter_sha256(value: &Value, _args: &HashMap<String, Value>) -> Result<Va
     let mut hasher = Sha256::new();
     Digest::update(&mut hasher, input_str.as_bytes());
     let result = hasher.finalize();
-    let hash_string = format!("{result:x}");
+    let hash_string = to_hex(&result);
     tera::to_value(hash_string)
         .map_err(|err| Error::msg(format!("Failed to serialize hash value: {err}")))
 }
@@ -69,7 +73,7 @@ pub fn filter_hmac_sha256(value: &Value, args: &HashMap<String, Value>) -> Resul
         HmacSha256::new_from_slice(key.as_bytes()).map_err(|err| Error::msg(format!("{err}")))?;
     mac.update(input_str.as_bytes());
     let result = mac.finalize();
-    let hash_string = format!("{:x}", result.into_bytes());
+    let hash_string = to_hex(&result.into_bytes());
     tera::to_value(hash_string)
         .map_err(|err| Error::msg(format!("Failed to serialize hash value: {err}")))
 }

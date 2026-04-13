@@ -57,10 +57,10 @@ teraclio --source <data-file> --template <template-file> [OPTIONS]
 | `--format, -f` | ❌ | Input format (auto-detected; required for stdin) |
 | `--env-vars` | ❌ | Include environment variables as `data.env` |
 | `--set KEY=VALUE` | ❌ | Set template variables from CLI (repeatable) |
-| `--check` | ❌ | Validate template without rendering |
+| `--check` | ❌ | Render-check templates without writing output |
 | `--diff` | ❌ | Show diff vs destination file instead of writing |
 | `--watch, -w` | ❌ | Watch files and re-render on changes |
-| `--strict` | ❌ | Fail on undefined template variables |
+| `--strict` | ❌ | Compatibility flag; undefined template variables already fail by default |
 | `--output-format` | ❌ | Validate output is well-formed (json, yaml, toml) |
 | `--recursive, -r` | ❌ | Process template directories recursively |
 | `--quiet, -q` | ❌ | Suppress informational messages |

@@ -57,7 +57,10 @@ pub struct Cli {
     #[arg(long = "check", help = "Validate the template without rendering")]
     pub check: bool,
 
-    #[arg(long = "strict", help = "Fail on undefined template variables")]
+    #[arg(
+        long = "strict",
+        help = "Deprecated compatibility flag. Undefined template variables already fail by default."
+    )]
     pub strict: bool,
 
     #[arg(

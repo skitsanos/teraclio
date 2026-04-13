@@ -76,7 +76,7 @@ teraclio -s base.json -s production.json -t app-config.yaml -d config.yaml
 #### Ad-Hoc Variables with --set
 ```bash
 # Set individual template variables from the command line
-teraclio -s data.json -t template.txt --set version=2.0.0 --set env=production
+teraclio -s data.json -t template.txt --set version=2.0.1 --set env=production
 
 # Use --set without a source file for simple variable injection
 teraclio -s defaults.yaml -t template.txt --set build_number=42 --set commit_sha=abc123
