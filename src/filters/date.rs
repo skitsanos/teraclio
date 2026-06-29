@@ -10,35 +10,35 @@ use tera::Error;
 pub fn filter_date_format(value: &Value, args: &HashMap<String, Value>) -> Result<Value, Error> {
     let input_str = value
         .as_str()
-        .ok_or_else(|| Error::msg("Invalid input: expected a string for date_format"))?;
+        .ok_or_else(|| Error::message("Invalid input: expected a string for date_format"))?;
 
     let format = args
         .get("format")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| Error::msg("Missing required argument: format"))?;
+        .ok_or_else(|| Error::message("Missing required argument: format"))?;
 
     // Try RFC 3339 / ISO 8601 with timezone
     if let Ok(dt) = DateTime::parse_from_rfc3339(input_str) {
         let formatted = dt.format(format).to_string();
-        return tera::to_value(formatted)
-            .map_err(|err| Error::msg(format!("Failed to serialize value: {err}")));
+        return serde_json::to_value(formatted)
+            .map_err(|err| Error::message(format!("Failed to serialize value: {err}")));
     }
 
     // Try NaiveDateTime with "%Y-%m-%dT%H:%M:%S"
     if let Ok(dt) = NaiveDateTime::parse_from_str(input_str, "%Y-%m-%dT%H:%M:%S") {
         let formatted = dt.format(format).to_string();
-        return tera::to_value(formatted)
-            .map_err(|err| Error::msg(format!("Failed to serialize value: {err}")));
+        return serde_json::to_value(formatted)
+            .map_err(|err| Error::message(format!("Failed to serialize value: {err}")));
     }
 
     // Try NaiveDate with "%Y-%m-%d"
     if let Ok(d) = NaiveDate::parse_from_str(input_str, "%Y-%m-%d") {
         let formatted = d.format(format).to_string();
-        return tera::to_value(formatted)
-            .map_err(|err| Error::msg(format!("Failed to serialize value: {err}")));
+        return serde_json::to_value(formatted)
+            .map_err(|err| Error::message(format!("Failed to serialize value: {err}")));
     }
 
-    Err(Error::msg(format!(
+    Err(Error::message(format!(
         "Unable to parse date string: '{input_str}'"
     )))
 }

@@ -9,10 +9,10 @@ use tera::Error;
 pub fn filter_truncate_words(value: &Value, args: &HashMap<String, Value>) -> Result<Value, Error> {
     let input_str = value
         .as_str()
-        .ok_or_else(|| Error::msg("Invalid input: expected a string for truncate_words"))?;
+        .ok_or_else(|| Error::message("Invalid input: expected a string for truncate_words"))?;
 
     let count = args.get("count").and_then(|v| v.as_u64()).ok_or_else(|| {
-        Error::msg("Missing or invalid required argument: count (expected integer)")
+        Error::message("Missing or invalid required argument: count (expected integer)")
     })? as usize;
 
     let end = args.get("end").and_then(|v| v.as_str()).unwrap_or("...");
@@ -20,12 +20,13 @@ pub fn filter_truncate_words(value: &Value, args: &HashMap<String, Value>) -> Re
     let words: Vec<&str> = input_str.split_whitespace().collect();
 
     if words.len() <= count {
-        return tera::to_value(input_str)
-            .map_err(|err| Error::msg(format!("Failed to serialize value: {err}")));
+        return serde_json::to_value(input_str)
+            .map_err(|err| Error::message(format!("Failed to serialize value: {err}")));
     }
 
     let truncated = format!("{}{}", words[..count].join(" "), end);
-    tera::to_value(truncated).map_err(|err| Error::msg(format!("Failed to serialize value: {err}")))
+    serde_json::to_value(truncated)
+        .map_err(|err| Error::message(format!("Failed to serialize value: {err}")))
 }
 
 #[cfg(test)]

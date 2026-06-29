@@ -18,11 +18,11 @@ fn to_hex(bytes: &[u8]) -> String {
 pub fn filter_md5(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
     let input_str = value
         .as_str()
-        .ok_or_else(|| Error::msg("Invalid input: expected a string for md5"))?;
+        .ok_or_else(|| Error::message("Invalid input: expected a string for md5"))?;
     let result = md5::compute(input_str.as_bytes());
     let hash_string = format!("{result:x}");
-    tera::to_value(hash_string)
-        .map_err(|err| Error::msg(format!("Failed to serialize hash value: {err}")))
+    serde_json::to_value(hash_string)
+        .map_err(|err| Error::message(format!("Failed to serialize hash value: {err}")))
 }
 
 /**
@@ -32,13 +32,13 @@ pub fn filter_md5(value: &Value, _args: &HashMap<String, Value>) -> Result<Value
 pub fn filter_sha1(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
     let input_str = value
         .as_str()
-        .ok_or_else(|| Error::msg("Invalid input: expected a string for sha1"))?;
+        .ok_or_else(|| Error::message("Invalid input: expected a string for sha1"))?;
     let mut hasher = Sha1::new();
     Digest::update(&mut hasher, input_str.as_bytes());
     let result = hasher.finalize();
     let hash_string = to_hex(&result);
-    tera::to_value(hash_string)
-        .map_err(|err| Error::msg(format!("Failed to serialize hash value: {err}")))
+    serde_json::to_value(hash_string)
+        .map_err(|err| Error::message(format!("Failed to serialize hash value: {err}")))
 }
 
 /**
@@ -48,13 +48,13 @@ pub fn filter_sha1(value: &Value, _args: &HashMap<String, Value>) -> Result<Valu
 pub fn filter_sha256(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
     let input_str = value
         .as_str()
-        .ok_or_else(|| Error::msg("Invalid input: expected a string for sha256"))?;
+        .ok_or_else(|| Error::message("Invalid input: expected a string for sha256"))?;
     let mut hasher = Sha256::new();
     Digest::update(&mut hasher, input_str.as_bytes());
     let result = hasher.finalize();
     let hash_string = to_hex(&result);
-    tera::to_value(hash_string)
-        .map_err(|err| Error::msg(format!("Failed to serialize hash value: {err}")))
+    serde_json::to_value(hash_string)
+        .map_err(|err| Error::message(format!("Failed to serialize hash value: {err}")))
 }
 
 /**
@@ -64,18 +64,18 @@ pub fn filter_sha256(value: &Value, _args: &HashMap<String, Value>) -> Result<Va
 pub fn filter_hmac_sha256(value: &Value, args: &HashMap<String, Value>) -> Result<Value, Error> {
     let input_str = value
         .as_str()
-        .ok_or_else(|| Error::msg("Invalid input: expected a string for hmac_sha256"))?;
+        .ok_or_else(|| Error::message("Invalid input: expected a string for hmac_sha256"))?;
     let key = args
         .get("key")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| Error::msg("Missing required argument: key"))?;
-    let mut mac =
-        HmacSha256::new_from_slice(key.as_bytes()).map_err(|err| Error::msg(format!("{err}")))?;
+        .ok_or_else(|| Error::message("Missing required argument: key"))?;
+    let mut mac = HmacSha256::new_from_slice(key.as_bytes())
+        .map_err(|err| Error::message(format!("{err}")))?;
     mac.update(input_str.as_bytes());
     let result = mac.finalize();
     let hash_string = to_hex(&result.into_bytes());
-    tera::to_value(hash_string)
-        .map_err(|err| Error::msg(format!("Failed to serialize hash value: {err}")))
+    serde_json::to_value(hash_string)
+        .map_err(|err| Error::message(format!("Failed to serialize hash value: {err}")))
 }
 
 #[cfg(test)]

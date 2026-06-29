@@ -11,13 +11,13 @@ pub fn filter_bytes_to_str(value: &Value, _args: &HashMap<String, Value>) -> Res
         let mut byte_vec: Vec<u8> = Vec::with_capacity(bytes.len());
         for (index, byte) in bytes.iter().enumerate() {
             let value = byte.as_u64().ok_or_else(|| {
-                Error::msg(format!(
+                Error::message(format!(
                     "Invalid input: expected number at index {index} for bytes_to_str"
                 ))
             })?;
 
             if value > u8::MAX as u64 {
-                return Err(Error::msg(format!(
+                return Err(Error::message(format!(
                     "Invalid byte value at index {index}: {value}. Expected 0..=255"
                 )));
             }
@@ -26,10 +26,10 @@ pub fn filter_bytes_to_str(value: &Value, _args: &HashMap<String, Value>) -> Res
         }
 
         let result = String::from_utf8_lossy(&byte_vec).into_owned();
-        tera::to_value(result)
-            .map_err(|err| Error::msg(format!("Failed to serialize converted value: {err}")))
+        serde_json::to_value(result)
+            .map_err(|err| Error::message(format!("Failed to serialize converted value: {err}")))
     } else {
-        Err(Error::msg("Invalid input: expected an array of bytes"))
+        Err(Error::message("Invalid input: expected an array of bytes"))
     }
 }
 
@@ -43,10 +43,10 @@ pub fn filter_str_to_bytes(value: &Value, _args: &HashMap<String, Value>) -> Res
             .bytes()
             .map(|b| Value::Number(serde_json::Number::from(b)))
             .collect();
-        tera::to_value(bytes)
-            .map_err(|err| Error::msg(format!("Failed to serialize converted value: {err}")))
+        serde_json::to_value(bytes)
+            .map_err(|err| Error::message(format!("Failed to serialize converted value: {err}")))
     } else {
-        Err(Error::msg("Invalid input: expected a string"))
+        Err(Error::message("Invalid input: expected a string"))
     }
 }
 

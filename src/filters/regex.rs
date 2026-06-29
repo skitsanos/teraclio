@@ -10,24 +10,24 @@ use tera::Error;
 pub fn filter_regex_replace(value: &Value, args: &HashMap<String, Value>) -> Result<Value, Error> {
     let input_str = value
         .as_str()
-        .ok_or_else(|| Error::msg("Invalid input: expected a string for regex_replace"))?;
+        .ok_or_else(|| Error::message("Invalid input: expected a string for regex_replace"))?;
 
     let pattern = args
         .get("pattern")
         .and_then(Value::as_str)
-        .ok_or_else(|| Error::msg("Missing required argument: pattern"))?;
+        .ok_or_else(|| Error::message("Missing required argument: pattern"))?;
 
     let replacement = args
         .get("replacement")
         .and_then(Value::as_str)
-        .ok_or_else(|| Error::msg("Missing required argument: replacement"))?;
+        .ok_or_else(|| Error::message("Missing required argument: replacement"))?;
 
-    let regex =
-        Regex::new(pattern).map_err(|err| Error::msg(format!("Invalid regex pattern: {err}")))?;
+    let regex = Regex::new(pattern)
+        .map_err(|err| Error::message(format!("Invalid regex pattern: {err}")))?;
 
     let result = regex.replace_all(input_str, replacement);
-    tera::to_value(result.as_ref())
-        .map_err(|err| Error::msg(format!("Failed to serialize value: {err}")))
+    serde_json::to_value(result.as_ref())
+        .map_err(|err| Error::message(format!("Failed to serialize value: {err}")))
 }
 
 #[cfg(test)]

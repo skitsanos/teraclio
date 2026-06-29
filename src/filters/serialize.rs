@@ -8,9 +8,9 @@ use tera::Error;
  */
 pub fn filter_json_encode(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
     let result = serde_json::to_string_pretty(value)
-        .map_err(|err| Error::msg(format!("Failed to serialize value to JSON: {err}")))?;
-    tera::to_value(result)
-        .map_err(|err| Error::msg(format!("Failed to serialize encoded value: {err}")))
+        .map_err(|err| Error::message(format!("Failed to serialize value to JSON: {err}")))?;
+    serde_json::to_value(result)
+        .map_err(|err| Error::message(format!("Failed to serialize encoded value: {err}")))
 }
 
 /**
@@ -19,9 +19,9 @@ pub fn filter_json_encode(value: &Value, _args: &HashMap<String, Value>) -> Resu
  */
 pub fn filter_yaml_encode(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
     let result = serde_yaml::to_string(value)
-        .map_err(|err| Error::msg(format!("Failed to serialize value to YAML: {err}")))?;
-    tera::to_value(result)
-        .map_err(|err| Error::msg(format!("Failed to serialize encoded value: {err}")))
+        .map_err(|err| Error::message(format!("Failed to serialize value to YAML: {err}")))?;
+    serde_json::to_value(result)
+        .map_err(|err| Error::message(format!("Failed to serialize encoded value: {err}")))
 }
 
 #[cfg(test)]

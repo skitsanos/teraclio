@@ -8,7 +8,8 @@ use tera::Error;
  */
 pub fn filter_uuid(_value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
     let id = uuid::Uuid::new_v4().to_string();
-    tera::to_value(id).map_err(|err| Error::msg(format!("Failed to serialize uuid value: {err}")))
+    serde_json::to_value(id)
+        .map_err(|err| Error::message(format!("Failed to serialize uuid value: {err}")))
 }
 
 #[cfg(test)]

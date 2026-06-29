@@ -10,10 +10,10 @@ use tera::Error;
 pub fn filter_html_escape(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
     let input_str = value
         .as_str()
-        .ok_or_else(|| Error::msg("Invalid input: expected a string for html_escape"))?;
+        .ok_or_else(|| Error::message("Invalid input: expected a string for html_escape"))?;
     let escaped = html_escape::encode_text(input_str);
-    tera::to_value(escaped.into_owned())
-        .map_err(|err| Error::msg(format!("Failed to serialize escaped value: {err}")))
+    serde_json::to_value(escaped.into_owned())
+        .map_err(|err| Error::message(format!("Failed to serialize escaped value: {err}")))
 }
 
 /**
@@ -23,10 +23,10 @@ pub fn filter_html_escape(value: &Value, _args: &HashMap<String, Value>) -> Resu
 pub fn filter_html_unescape(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
     let input_str = value
         .as_str()
-        .ok_or_else(|| Error::msg("Invalid input: expected a string for html_unescape"))?;
+        .ok_or_else(|| Error::message("Invalid input: expected a string for html_unescape"))?;
     let unescaped = html_escape::decode_html_entities(input_str);
-    tera::to_value(unescaped.into_owned())
-        .map_err(|err| Error::msg(format!("Failed to serialize unescaped value: {err}")))
+    serde_json::to_value(unescaped.into_owned())
+        .map_err(|err| Error::message(format!("Failed to serialize unescaped value: {err}")))
 }
 
 /**
@@ -36,8 +36,8 @@ pub fn filter_html_unescape(value: &Value, _args: &HashMap<String, Value>) -> Re
 pub fn filter_xml_escape(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
     let input_str = value
         .as_str()
-        .ok_or_else(|| Error::msg("Invalid input: expected a string for xml_escape"))?;
+        .ok_or_else(|| Error::message("Invalid input: expected a string for xml_escape"))?;
     let escaped = html_escape::encode_text(input_str);
-    tera::to_value(escaped.into_owned())
-        .map_err(|err| Error::msg(format!("Failed to serialize escaped value: {err}")))
+    serde_json::to_value(escaped.into_owned())
+        .map_err(|err| Error::message(format!("Failed to serialize escaped value: {err}")))
 }

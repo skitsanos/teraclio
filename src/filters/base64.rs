@@ -10,10 +10,10 @@ use tera::Error;
 pub fn filter_base64_encode(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
     let input_str = value
         .as_str()
-        .ok_or_else(|| Error::msg("Invalid input: expected a string for base64_encode"))?;
+        .ok_or_else(|| Error::message("Invalid input: expected a string for base64_encode"))?;
     let encoded_value = general_purpose::STANDARD.encode(input_str);
-    tera::to_value(encoded_value)
-        .map_err(|err| Error::msg(format!("Failed to serialize encoded value: {err}")))
+    serde_json::to_value(encoded_value)
+        .map_err(|err| Error::message(format!("Failed to serialize encoded value: {err}")))
 }
 
 /**
@@ -23,11 +23,11 @@ pub fn filter_base64_encode(value: &Value, _args: &HashMap<String, Value>) -> Re
 pub fn filter_base64_decode(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
     let input_str = value
         .as_str()
-        .ok_or_else(|| Error::msg("Invalid input: expected a string for base64_decode"))?;
+        .ok_or_else(|| Error::message("Invalid input: expected a string for base64_decode"))?;
 
     match general_purpose::STANDARD.decode(input_str) {
-        Ok(decoded_bytes) => tera::to_value(decoded_bytes)
-            .map_err(|err| Error::msg(format!("Failed to serialize decoded value: {err}"))),
-        Err(_) => Err(Error::msg("Failed to decode Base64: invalid input")),
+        Ok(decoded_bytes) => serde_json::to_value(decoded_bytes)
+            .map_err(|err| Error::message(format!("Failed to serialize decoded value: {err}"))),
+        Err(_) => Err(Error::message("Failed to decode Base64: invalid input")),
     }
 }
