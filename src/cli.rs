@@ -59,7 +59,7 @@ pub struct Cli {
 
     #[arg(
         long = "strict",
-        help = "Deprecated compatibility flag. Undefined template variables already fail by default."
+        help = "Deprecated compatibility flag retained for backward compatibility. It currently has no effect."
     )]
     pub strict: bool,
 

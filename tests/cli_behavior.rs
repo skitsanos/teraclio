@@ -27,7 +27,7 @@ fn check_mode_fails_when_render_would_fail() {
     let template_path = temp_dir.join("template.txt");
 
     write_file(&data_path, "{}");
-    write_file(&template_path, "{{ data.missing }}");
+    write_file(&template_path, "{{ missing + 1 }}");
 
     let output = Command::new(env!("CARGO_BIN_EXE_teraclio"))
         .args([
