@@ -18,7 +18,7 @@ pub fn filter_json_encode(value: &Value, _args: &HashMap<String, Value>) -> Resu
  * @author: skitsanos
  */
 pub fn filter_yaml_encode(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
-    let result = serde_yaml::to_string(value)
+    let result = noyalib::compat::serde_yaml::to_string(value)
         .map_err(|err| Error::message(format!("Failed to serialize value to YAML: {err}")))?;
     serde_json::to_value(result)
         .map_err(|err| Error::message(format!("Failed to serialize encoded value: {err}")))
@@ -44,7 +44,7 @@ mod tests {
         let input = json!({"key": "value"});
         let args = HashMap::new();
         let result = filter_yaml_encode(&input, &args).unwrap();
-        let expected = serde_yaml::to_string(&json!({"key": "value"})).unwrap();
+        let expected = noyalib::compat::serde_yaml::to_string(&json!({"key": "value"})).unwrap();
         assert_eq!(result, Value::String(expected));
     }
 }

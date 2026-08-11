@@ -171,7 +171,7 @@ fn validate_output(content: &str, format: InputFormat) -> Result<()> {
             })?;
         }
         InputFormat::Yaml => {
-            serde_yaml::from_str::<serde_json::Value>(content).map_err(|e| {
+            noyalib::compat::serde_yaml::from_str::<serde_json::Value>(content).map_err(|e| {
                 TeraclioError::InvalidInput(format!("Output is not valid YAML: {e}"))
             })?;
         }

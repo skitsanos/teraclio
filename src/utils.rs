@@ -86,7 +86,7 @@ pub fn parse_data_source(source: &str, format: Option<InputFormat>) -> Result<Va
 
     let value = match input_format {
         InputFormat::Json => serde_json::from_str(&contents).map_err(TeraclioError::JsonError)?,
-        InputFormat::Yaml => serde_yaml::from_str(&contents)
+        InputFormat::Yaml => noyalib::compat::serde_yaml::from_str(&contents)
             .map_err(|e| TeraclioError::InvalidInput(format!("YAML parsing error: {e}")))?,
         InputFormat::Toml => toml::from_str(&contents)
             .map_err(|e| TeraclioError::InvalidInput(format!("TOML parsing error: {e}")))?,
