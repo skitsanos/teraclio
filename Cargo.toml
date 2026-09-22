@@ -13,10 +13,10 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap = { version = "4.6.6", features = ["derive"] }
-clap_complete = "4.6.9"
+clap = { version = "4.6.7", features = ["derive"] }
+clap_complete = "4.6.11"
 serde_json = "1.0.151"
-tera = "2.3.0"
+tera = "2.4.0"
 base64 = "0.23.1"
 anyhow = "1.0.104"
 
@@ -31,11 +31,11 @@ convert_case = "0.12.0"
 regex = "1.13.1"
 similar = "3.2.0"
 chrono = "0.4.45"
-uuid = { version = "1.26.0", features = ["v4"] }
+uuid = { version = "1.26.1", features = ["v4"] }
 
 # File watching
 notify = "8.2.0"
 
 # Input format support
-noyalib = { version = "0.0.39", features = ["compat-serde-yaml"] }
-toml = "1.1.5"
+noyalib = { version = "0.0.51", features = ["compat-serde-yaml"] }
+toml = "1.1.6"
