@@ -69,15 +69,15 @@ Decoded: {{ data.encoded_url | url_decode }}
 ```jinja2
 Safe HTML: {{ data.user_content | html_escape }}
 ```
-**Example**: `<script>alert('xss')</script>` → `&lt;script&gt;alert('xss')&lt;/script&gt;`
+**Example**: `<script>alert('xss')</script>` → `&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;`
 
-Escapes `&`, `<`, and `>` only (text-content escaping). Quotes are **not** escaped, so the output is not safe inside HTML attribute values; use Tera's built-in `escape_html` there. In `.html`/`.htm`/`.xml` templates Tera already auto-escapes output, and adding `html_escape` escapes twice.
+Escapes `&`, `<`, `>`, `"`, and `'`, so the output is safe in element text and in quoted attribute values. Use it in non-HTML templates (`.txt`, `.md`, `.tera`) that produce HTML. In `.html`/`.htm`/`.xml` templates Tera already auto-escapes output, and adding `html_escape` escapes twice.
 
 ### `xml_escape`
 ```jinja2
 Safe XML: {{ data.xml_content | xml_escape }}
 ```
-Escapes `&`, `<`, and `>` for XML text content. Like `html_escape`, it leaves quotes alone; use Tera's built-in `escape_xml` for attribute values.
+Escapes the five XML special characters (`&`, `<`, `>`, `"` → `&quot;`, `'` → `&apos;`), safe in text and attribute values.
 
 ### `html_unescape`
 ```jinja2
@@ -115,9 +115,11 @@ Convert between different naming conventions.
 
 ### `slug`
 ```jinja2
-{{ "Hello World" | slug }}
+{{ "Hello World!" | slug }}
 ```
 **Output**: `hello-world`
+
+Lowercases, splits camelCase, and collapses every run of punctuation or whitespace into a single `-`: `"C++ & Rust: 2024?"` → `c-rust-2024`.
 
 ## Serialization Filters
 
@@ -160,7 +162,7 @@ Parse and reformat date strings.
 ```jinja2
 {{ data.created_at | date_format(format="%B %d, %Y") }}
 ```
-Parses dates (RFC 3339, ISO 8601, YYYY-MM-DD) and reformats using strftime format strings.
+Parses RFC 3339 date-times (with offset), local date-times (`2024-01-15T10:30:00` or `2024-01-15 10:30:00`, optional fractional seconds), and plain dates (`2024-01-15`), then reformats with a [chrono strftime](https://docs.rs/chrono/latest/chrono/format/strftime/index.html) string. An unknown specifier, or `%z`/`%Z` on a value without an offset, is a template error. TOML date and datetime values arrive as strings in these forms, so they work directly.
 
 ## UUID Filter
 
@@ -311,6 +313,6 @@ Invalid operations will result in clear template errors with descriptive message
 ## Performance Notes
 
 - Regex replace compiles its pattern on every call; avoid complex patterns in tight loops
-- `date_format` tries RFC 3339, then `YYYY-MM-DDTHH:MM:SS`, then `YYYY-MM-DD`, in that order
+- `date_format` tries RFC 3339, then local date-time (`T` or space, optional fractional seconds), then `YYYY-MM-DD`, in that order
 
 Hashing is cheap at template scale; the main cost to watch is `regex_replace` inside large loops.

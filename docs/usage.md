@@ -107,7 +107,10 @@ teraclio -s config.yaml -t k8s-deployment.yaml -d deployment.yaml --diff
 
 #### Watch Mode
 ```bash
-# Automatically re-render when source or template files change
+# Automatically re-render when source or template files change.
+# Watch mode follows editors that save via rename, ignores its own output and
+# editor scratch files (.swp, ~), and renders once per burst of changes.
+# A render error is reported and watching continues.
 teraclio -s data.json -t template.txt -d output.txt --watch
 
 # Combine with quiet mode for less noise during development
@@ -128,8 +131,8 @@ teraclio -s data.json -t templates/ -d output/ --recursive
 # Ensure the rendered output is valid JSON
 teraclio -s data.yaml -t api-response.json -d output.json --output-format json
 
-# Validate YAML output
-teraclio -s config.json -t k8s-manifest.yaml --output-format yaml
+# Validate YAML output (multi-document `---` streams are accepted)
+teraclio -s config.json -t k8s-manifest.yaml.tera --output-format yaml
 ```
 
 #### Quiet Mode
@@ -156,8 +159,9 @@ teraclio --completions zsh > ~/.zfunc/_teraclio
 # Templates can include (or extend) other templates using Tera's include tag
 # Given a template that contains: {% include "header.html" %}
 # Teraclio registers every file in the template's own directory under its bare
-# file name, so header.html must sit next to page.html. Subdirectory paths such
-# as {% include "partials/header.html" %} are not resolved.
+# file name (except the --source files and the --dest file), so header.html must
+# sit next to page.html. Subdirectory paths such as
+# {% include "partials/header.html" %} are not resolved.
 teraclio -s data.json -t templates/page.html -d output.html
 ```
 
@@ -256,6 +260,8 @@ name = "John Doe"
 email = "john@example.com"
 ```
 
+TOML dates and datetimes (`created = 2024-01-15T10:30:00Z`) reach templates as strings in RFC 3339 / ISO 8601 form, ready for `date_format`.
+
 ### Template Access
 ```jinja2
 User: {{ data.user.name }} ({{ data.user.email }})
@@ -286,6 +292,7 @@ Teraclio prints errors to stderr as `Error: ...` and exits with code 1. Validati
 - **Unknown filter or function**: ``Template error: error: Unknown filter `date` `` (caught before rendering)
 - **Diff without destination**: `--dest is required when using --diff`
 - **Directory mode without destination**: `--dest is required when using directory mode`
+- **Destination overwrites the template**: `--dest must not be the template file itself` (or `template directory itself`)
 
 ## Advanced Usage Patterns
 
