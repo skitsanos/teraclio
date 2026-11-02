@@ -1,13 +1,15 @@
 use crate::cli::{generate_completions, Cli};
-use crate::engine::TemplateEngine;
+use crate::engine::{absolute_path, TemplateEngine};
 use crate::error::{Result, TeraclioError};
 use crate::utils::{parse_data_source, InputFormat};
 use clap::Parser;
-use notify::{recommended_watcher, RecursiveMode, Watcher};
+use notify::{recommended_watcher, Event, EventKind, RecursiveMode, Watcher};
 use serde_json::Value;
+use std::collections::HashSet;
 use std::ffi::OsString;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
+use std::time::{Duration, Instant};
 
 mod cli;
 mod engine;
@@ -171,12 +173,13 @@ fn validate_output(content: &str, format: InputFormat) -> Result<()> {
             })?;
         }
         InputFormat::Yaml => {
-            noyalib::compat::serde_yaml::from_str::<serde_json::Value>(content).map_err(|e| {
-                TeraclioError::InvalidInput(format!("Output is not valid YAML: {e}"))
-            })?;
+            // Multi-document streams (`---` separated, e.g. Kubernetes manifests) are valid YAML
+            noyalib::compat::serde_yaml::from_str_multi::<serde_json::Value>(content).map_err(
+                |e| TeraclioError::InvalidInput(format!("Output is not valid YAML: {e}")),
+            )?;
         }
         InputFormat::Toml => {
-            toml::from_str::<toml::Value>(content).map_err(|e| {
+            toml::from_str::<toml::Table>(content).map_err(|e| {
                 TeraclioError::InvalidInput(format!("Output is not valid TOML: {e}"))
             })?;
         }
@@ -241,8 +244,18 @@ fn render_template(
     output_path: Option<&Path>,
     args: &Cli,
 ) -> Result<()> {
-    let mut engine = TemplateEngine::new(args.strict);
-    engine.load_template(template_path)?;
+    // Data sources and the output file share the template's directory often
+    // enough that they must not be parsed as sibling templates.
+    let mut exclude: Vec<PathBuf> = args
+        .json_source
+        .iter()
+        .filter(|source| source.as_str() != "-")
+        .map(PathBuf::from)
+        .collect();
+    exclude.extend(output_path.map(Path::to_path_buf));
+
+    let mut engine = TemplateEngine::new();
+    engine.load_template(template_path, &exclude)?;
     let rendered = engine.render(template_path, json_data)?;
     handle_rendered_output(&rendered, output_path, args)
 }
@@ -253,12 +266,16 @@ fn render_template(
  */
 fn render_once(args: &Cli) -> Result<()> {
     let json_data = parse_data(args)?;
-    let template_path = require_template_path(args)?;
-    let output_path = args
-        .output_file
-        .as_ref()
-        .map(|p| p.as_ref() as &std::path::Path);
-    render_template(Path::new(template_path), &json_data, output_path, args)
+    let template_path = Path::new(require_template_path(args)?);
+    let output_path = args.output_file.as_ref().map(Path::new);
+    if let Some(output) = output_path {
+        if absolute_path(output) == absolute_path(template_path) && !args.check && !args.diff {
+            return Err(TeraclioError::InvalidInput(
+                "--dest must not be the template file itself".to_string(),
+            ));
+        }
+    }
+    render_template(template_path, &json_data, output_path, args)
 }
 
 /**
@@ -273,67 +290,89 @@ fn run_directory_mode(template_dir: &Path, args: &Cli, json_data: &Value) -> Res
         ));
     }
 
-    process_directory(
-        template_dir,
-        dest_dir.map(Path::to_path_buf),
-        json_data,
+    let dest_root = dest_dir.map(absolute_path);
+    if dest_root.as_deref() == Some(absolute_path(template_dir).as_path()) && !args.check {
+        return Err(TeraclioError::InvalidInput(
+            "--dest must not be the template directory itself".to_string(),
+        ));
+    }
+
+    let mut walk = DirectoryWalk {
         args,
-        args.recursive,
-    )
+        json_data,
+        dest_root,
+        visited: HashSet::new(),
+    };
+    walk.process(template_dir, dest_dir.map(Path::to_path_buf))
 }
 
 /**
- * Recursively (or non-recursively) process a template directory, mirroring
- * the directory structure in the destination.
+ * State for one directory-mode run.
  * @author: skitsanos
  */
-fn process_directory(
-    template_dir: &Path,
-    dest_dir: Option<std::path::PathBuf>,
-    json_data: &Value,
-    args: &Cli,
-    recursive: bool,
-) -> Result<()> {
-    if let Some(dest_dir) = &dest_dir {
-        if !args.check && !args.diff && !dest_dir.exists() {
-            std::fs::create_dir_all(dest_dir)?;
+struct DirectoryWalk<'a> {
+    args: &'a Cli,
+    json_data: &'a Value,
+    /// Absolute destination root; never descended into, so a destination
+    /// inside the template tree is not rendered again on every level.
+    dest_root: Option<PathBuf>,
+    /// Canonical directories already processed, which breaks symlink cycles.
+    visited: HashSet<PathBuf>,
+}
+
+impl DirectoryWalk<'_> {
+    /**
+     * Process a template directory (recursively with --recursive), mirroring
+     * the directory structure in the destination.
+     * @author: skitsanos
+     */
+    fn process(&mut self, template_dir: &Path, dest_dir: Option<PathBuf>) -> Result<()> {
+        let canonical = template_dir
+            .canonicalize()
+            .unwrap_or_else(|_| absolute_path(template_dir));
+        if !self.visited.insert(canonical) {
+            return Ok(());
         }
-    }
 
-    for entry in std::fs::read_dir(template_dir)? {
-        let entry = entry?;
-        let path = entry.path();
-
-        let file_name = match entry.file_name().to_str() {
-            Some(name) if name.starts_with('.') => continue,
-            Some(name) => name.to_string(),
-            None => continue,
-        };
-
-        if path.is_dir() {
-            if recursive {
-                process_directory(
-                    &path,
-                    dest_dir.as_ref().map(|dir| dir.join(&file_name)),
-                    json_data,
-                    args,
-                    recursive,
-                )?;
+        if let Some(dest_dir) = &dest_dir {
+            if !self.args.check && !self.args.diff && !dest_dir.exists() {
+                std::fs::create_dir_all(dest_dir)?;
             }
-            continue;
         }
 
-        let output_path = dest_dir.as_ref().map(|dir| dir.join(&file_name));
-        render_template(&path, json_data, output_path.as_deref(), args)?;
-        info(args, &format!("[teraclio] Processed: {file_name}"));
-    }
+        let mut entries: Vec<_> =
+            std::fs::read_dir(template_dir)?.collect::<std::io::Result<_>>()?;
+        // Deterministic order for output messages and error reporting
+        entries.sort_by_key(|entry| entry.file_name());
 
-    Ok(())
+        for entry in entries {
+            let path = entry.path();
+
+            let file_name = match entry.file_name().to_str() {
+                Some(name) if name.starts_with('.') => continue,
+                Some(name) => name.to_string(),
+                None => continue,
+            };
+
+            if path.is_dir() {
+                let is_dest = self.dest_root.as_deref() == Some(absolute_path(&path).as_path());
+                if self.args.recursive && !is_dest {
+                    self.process(&path, dest_dir.as_ref().map(|dir| dir.join(&file_name)))?;
+                }
+                continue;
+            }
+
+            let output_path = dest_dir.as_ref().map(|dir| dir.join(&file_name));
+            render_template(&path, self.json_data, output_path.as_deref(), self.args)?;
+            info(self.args, &format!("[teraclio] Processed: {file_name}"));
+        }
+
+        Ok(())
+    }
 }
 
 fn execute(args: &Cli) -> Result<()> {
-    let template_path_os = require_template_path(args)?;
-    let template_path = Path::new(template_path_os);
+    let template_path = Path::new(require_template_path(args)?);
 
     if template_path.is_dir() {
         let json_data = parse_data(args)?;
@@ -390,70 +429,254 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
-    let template_path_os = require_template_path(&args)?;
-    let template_path = Path::new(template_path_os);
+    let template_path = Path::new(require_template_path(&args)?);
 
-    execute(&args)?;
-    if args.check {
-        info(&args, "Template render check passed.");
+    if !args.watch {
+        execute(&args)?;
+        if args.check {
+            info(&args, "Template render check passed.");
+        }
+        return Ok(());
     }
 
-    // If watch mode is enabled, enter the watch loop
-    if args.watch {
-        for source in &args.json_source {
-            if source == "-" {
-                return Err(TeraclioError::InvalidInput(
-                    "Watch mode cannot be used with stdin ('-') as source.".to_string(),
-                ));
-            }
-        }
+    // Reject stdin before rendering, so the data is not consumed for nothing
+    if args.json_source.iter().any(|source| source == "-") {
+        return Err(TeraclioError::InvalidInput(
+            "Watch mode cannot be used with stdin ('-') as source.".to_string(),
+        ));
+    }
 
-        let template_str = template_path_os.to_str().ok_or_else(|| {
-            TeraclioError::InvalidInput("Template path is not valid UTF-8.".to_string())
-        })?;
+    // In watch mode a broken first render is reported, not fatal: the user is
+    // about to fix the template or data, and the watcher should pick that up.
+    match execute(&args) {
+        Ok(()) if args.check => info(&args, "Template render check passed."),
+        Ok(()) => {}
+        Err(e) => eprintln!("[teraclio] Render error: {e}"),
+    }
 
-        info(&args, "[teraclio] Watching for changes...");
+    watch(&args, template_path)
+}
 
-        let (tx, rx) = mpsc::channel();
-        let mut watcher = recommended_watcher(tx)?;
-        if template_path.is_dir() {
-            watcher.watch(
-                Path::new(template_str),
-                if args.recursive {
-                    RecursiveMode::Recursive
-                } else {
-                    RecursiveMode::NonRecursive
-                },
-            )?;
+/**
+ * What watch mode listens to, and which events trigger a re-render.
+ * @author: skitsanos
+ */
+struct WatchPlan {
+    /// Directories to watch. Watching directories rather than files survives
+    /// editors that save by writing a temp file and renaming it over the
+    /// original, which silently drops a watch placed on the file itself.
+    dirs: Vec<(PathBuf, RecursiveMode)>,
+    /// Exact files that trigger a re-render: the template and every source.
+    files: HashSet<PathBuf>,
+    /// Any non-hidden file here triggers a re-render: include/extends
+    /// siblings of a template file, or every template in directory mode.
+    template_dir: (PathBuf, RecursiveMode),
+    /// The rendered output (file or directory). Its changes must never
+    /// trigger a re-render, or every write would schedule the next one.
+    output: Option<PathBuf>,
+}
+
+impl WatchPlan {
+    fn new(args: &Cli, template_path: &Path) -> Self {
+        let template_abs = absolute_path(template_path);
+        let mut files = HashSet::new();
+
+        let template_dir = if template_path.is_dir() {
+            let mode = if args.recursive {
+                RecursiveMode::Recursive
+            } else {
+                RecursiveMode::NonRecursive
+            };
+            (template_abs, mode)
         } else {
-            let watch_root = template_path.parent().unwrap_or_else(|| Path::new("."));
-            watcher.watch(watch_root, RecursiveMode::NonRecursive)?;
-        }
+            let dir = parent_dir(&template_abs);
+            files.insert(template_abs);
+            (dir, RecursiveMode::NonRecursive)
+        };
+
+        let mut dirs = vec![template_dir.clone()];
         for source in &args.json_source {
-            watcher.watch(Path::new(source.as_str()), RecursiveMode::NonRecursive)?;
+            let source_abs = absolute_path(Path::new(source));
+            let dir = parent_dir(&source_abs);
+            let covered = dirs.iter().any(|(watched, mode)| {
+                *watched == dir || (*mode == RecursiveMode::Recursive && dir.starts_with(watched))
+            });
+            if !covered {
+                dirs.push((dir, RecursiveMode::NonRecursive));
+            }
+            files.insert(source_abs);
         }
 
-        loop {
-            match rx.recv() {
-                Ok(Ok(event)) => {
-                    if event.kind.is_modify() {
-                        info(&args, "[teraclio] Detected change, re-rendering...");
-                        if let Err(e) = execute(&args) {
-                            eprintln!("[teraclio] Re-render error: {e}");
-                        }
-                    }
-                }
-                Ok(Err(e)) => {
-                    eprintln!("[teraclio] Watch error: {e}");
-                }
-                Err(e) => {
-                    return Err(TeraclioError::WatchError(format!(
-                        "Watch channel closed: {e}"
-                    )));
-                }
-            }
+        let output = args
+            .output_file
+            .as_ref()
+            .map(|output| absolute_path(Path::new(output)));
+
+        Self {
+            dirs,
+            files,
+            template_dir,
+            output,
         }
     }
 
-    Ok(())
+    fn is_relevant(&self, path: &Path) -> bool {
+        if self
+            .output
+            .as_ref()
+            .is_some_and(|output| path.starts_with(output))
+        {
+            return false;
+        }
+        if self.files.contains(path) {
+            return true;
+        }
+
+        // Skip dotfiles and editor scratch files (.swp, foo~, .#lock)
+        let scratch = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_none_or(|name| name.starts_with('.') || name.ends_with('~'));
+        if scratch {
+            return false;
+        }
+
+        let (dir, mode) = &self.template_dir;
+        match mode {
+            RecursiveMode::Recursive => path.starts_with(dir),
+            RecursiveMode::NonRecursive => path.parent() == Some(dir.as_path()),
+        }
+    }
+}
+
+/**
+ * Directory containing an absolute path (the path itself if it has no parent).
+ * @author: skitsanos
+ */
+fn parent_dir(path: &Path) -> PathBuf {
+    path.parent().unwrap_or(path).to_path_buf()
+}
+
+/**
+ * Watch the template and sources, re-rendering after each burst of changes.
+ * @author: skitsanos
+ */
+fn watch(args: &Cli, template_path: &Path) -> Result<()> {
+    /// Quiet period that ends a burst; one editor save emits several events.
+    const DEBOUNCE: Duration = Duration::from_millis(150);
+    /// Upper bound on how long a continuous stream of events can delay a render.
+    const MAX_DEBOUNCE: Duration = Duration::from_secs(1);
+
+    let plan = WatchPlan::new(args, template_path);
+    let (tx, rx) = mpsc::channel();
+    let mut watcher = recommended_watcher(tx)?;
+    for (dir, mode) in &plan.dirs {
+        watcher.watch(dir, *mode)?;
+    }
+
+    info(args, "[teraclio] Watching for changes...");
+
+    let changed_path = |event: notify::Result<Event>| -> Option<PathBuf> {
+        match event {
+            Ok(event)
+                if matches!(
+                    event.kind,
+                    EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
+                ) =>
+            {
+                event.paths.into_iter().find(|path| plan.is_relevant(path))
+            }
+            Ok(_) => None,
+            Err(e) => {
+                eprintln!("[teraclio] Watch error: {e}");
+                None
+            }
+        }
+    };
+
+    loop {
+        let first = rx
+            .recv()
+            .map_err(|e| TeraclioError::WatchError(format!("Watch channel closed: {e}")))?;
+        let mut trigger = changed_path(first);
+
+        // Drain the rest of the burst so one save renders once, but never
+        // postpone a render indefinitely if the directory is never quiet.
+        let deadline = Instant::now() + MAX_DEBOUNCE;
+        while Instant::now() < deadline {
+            match rx.recv_timeout(DEBOUNCE) {
+                Ok(event) if trigger.is_none() => trigger = changed_path(event),
+                Ok(_) => {}
+                Err(_) => break,
+            }
+        }
+
+        if let Some(path) = trigger {
+            info(
+                args,
+                &format!(
+                    "[teraclio] Detected change in {}, re-rendering...",
+                    path.display()
+                ),
+            );
+            if let Err(e) = execute(args) {
+                eprintln!("[teraclio] Re-render error: {e}");
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{absolute_path, Cli, WatchPlan};
+    use clap::Parser;
+    use std::path::Path;
+
+    fn plan(args: &[&str]) -> WatchPlan {
+        let cli = Cli::parse_from(std::iter::once("teraclio").chain(args.iter().copied()));
+        let template = cli.template_path.clone().expect("template");
+        WatchPlan::new(&cli, Path::new(&template))
+    }
+
+    #[test]
+    fn output_next_to_template_never_triggers() {
+        let plan = plan(&[
+            "-s",
+            "work/d.json",
+            "-t",
+            "work/t.txt",
+            "-d",
+            "work/out.txt",
+        ]);
+        assert!(!plan.is_relevant(&absolute_path(Path::new("work/out.txt"))));
+        assert!(plan.is_relevant(&absolute_path(Path::new("work/t.txt"))));
+        assert!(plan.is_relevant(&absolute_path(Path::new("work/d.json"))));
+        // Siblings can be included, so they trigger too
+        assert!(plan.is_relevant(&absolute_path(Path::new("work/header.txt"))));
+    }
+
+    #[test]
+    fn editor_scratch_files_and_unrelated_source_siblings_are_ignored() {
+        let plan = plan(&["-s", "data/d.json", "-t", "tpl/t.txt"]);
+        assert!(!plan.is_relevant(&absolute_path(Path::new("tpl/.t.txt.swp"))));
+        assert!(!plan.is_relevant(&absolute_path(Path::new("tpl/t.txt~"))));
+        assert!(!plan.is_relevant(&absolute_path(Path::new("data/other.json"))));
+        assert!(plan.is_relevant(&absolute_path(Path::new("data/d.json"))));
+    }
+
+    #[test]
+    fn source_directories_are_watched_not_source_files() {
+        // Watching the directory survives atomic rename-over saves
+        let plan = plan(&["-s", "data/d.json", "-t", "tpl/t.txt"]);
+        let dirs: Vec<_> = plan.dirs.iter().map(|(dir, _)| dir.clone()).collect();
+        assert!(dirs.contains(&absolute_path(Path::new("data"))));
+        assert!(dirs.contains(&absolute_path(Path::new("tpl"))));
+    }
+
+    #[test]
+    fn directory_mode_ignores_destination_inside_template_tree() {
+        let plan = plan(&["-s", "d.json", "-t", ".", "-d", "out", "-r"]);
+        assert!(!plan.is_relevant(&absolute_path(Path::new("out/a.txt"))));
+        assert!(plan.is_relevant(&absolute_path(Path::new("sub/a.txt"))));
+    }
 }
