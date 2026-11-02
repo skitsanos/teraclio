@@ -277,13 +277,9 @@ fn watch_rejects_stdin_before_rendering() {
         .stderr(Stdio::piped())
         .spawn()
         .expect("spawn teraclio");
-    // Valid data: the old code rendered it, then rejected watch + stdin
-    child
-        .stdin
-        .take()
-        .expect("stdin")
-        .write_all(br#"{"n":1}"#)
-        .expect("write stdin");
+    // Valid data: the old code rendered it, then rejected watch + stdin. The
+    // fixed code exits without reading, so this write may hit a closed pipe.
+    let _ = child.stdin.take().expect("stdin").write_all(br#"{"n":1}"#);
     let output = child.wait_with_output().expect("wait");
 
     assert!(!output.status.success());
