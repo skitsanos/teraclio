@@ -41,7 +41,7 @@ teraclio --version
 ## Build from Source
 
 ### Prerequisites
-- Rust 1.70+ ([Install Rust](https://rustup.rs/))
+- Rust 1.89+ ([Install Rust](https://rustup.rs/)); the repo pins 1.99.1 via `rust-toolchain.toml`, which rustup picks up automatically
 - Git
 
 ### Build Steps
