@@ -292,3 +292,221 @@ fn watch_rejects_stdin_before_rendering() {
 
     fs::remove_dir_all(temp_dir).expect("cleanup temp dir");
 }
+
+#[test]
+fn diff_exit_code_reflects_differences() {
+    let temp_dir = unique_temp_dir();
+    write_file(&temp_dir.join("data.json"), r#"{"n":"a"}"#);
+    write_file(&temp_dir.join("t.txt"), "v={{ data.n }}");
+    write_file(&temp_dir.join("out.txt"), "v=a");
+
+    let same = teraclio(
+        &temp_dir,
+        &["-s", "data.json", "-t", "t.txt", "-d", "out.txt", "--diff"],
+    );
+    assert_eq!(same.status.code(), Some(0));
+
+    let changed = teraclio(
+        &temp_dir,
+        &[
+            "-s",
+            "data.json",
+            "-t",
+            "t.txt",
+            "-d",
+            "out.txt",
+            "--diff",
+            "--set",
+            "n=b",
+        ],
+    );
+    assert_eq!(changed.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&changed.stdout).contains("+v=b"));
+    assert_eq!(fs::read_to_string(temp_dir.join("out.txt")).unwrap(), "v=a");
+
+    fs::remove_dir_all(temp_dir).expect("cleanup temp dir");
+}
+
+#[test]
+fn dest_parent_directories_are_created() {
+    let temp_dir = unique_temp_dir();
+    write_file(&temp_dir.join("data.json"), r#"{"n":"a"}"#);
+    write_file(&temp_dir.join("t.txt"), "v={{ data.n }}");
+
+    let output = teraclio(
+        &temp_dir,
+        &["-s", "data.json", "-t", "t.txt", "-d", "a/b/out.txt"],
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(temp_dir.join("a/b/out.txt")).unwrap(),
+        "v=a"
+    );
+
+    fs::remove_dir_all(temp_dir).expect("cleanup temp dir");
+}
+
+#[cfg(unix)]
+#[test]
+fn atomic_write_keeps_permissions_and_symlinks() {
+    use std::os::unix::fs::{symlink, PermissionsExt};
+
+    let temp_dir = unique_temp_dir();
+    write_file(&temp_dir.join("data.json"), r#"{"n":"a"}"#);
+    write_file(&temp_dir.join("t.txt"), "v={{ data.n }}");
+    write_file(&temp_dir.join("real.sh"), "old");
+    fs::set_permissions(temp_dir.join("real.sh"), fs::Permissions::from_mode(0o750)).unwrap();
+    symlink("real.sh", temp_dir.join("link.sh")).unwrap();
+
+    let output = teraclio(
+        &temp_dir,
+        &["-s", "data.json", "-t", "t.txt", "-d", "link.sh"],
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let link = fs::symlink_metadata(temp_dir.join("link.sh")).unwrap();
+    assert!(link.file_type().is_symlink(), "symlink was replaced");
+    assert_eq!(fs::read_to_string(temp_dir.join("real.sh")).unwrap(), "v=a");
+    let mode = fs::metadata(temp_dir.join("real.sh"))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o777, 0o750);
+    let leftovers: Vec<_> = fs::read_dir(&temp_dir)
+        .unwrap()
+        .flatten()
+        .filter(|e| e.file_name().to_string_lossy().contains(".teraclio-"))
+        .collect();
+    assert!(leftovers.is_empty(), "temp files left behind");
+
+    fs::remove_dir_all(temp_dir).expect("cleanup temp dir");
+}
+
+#[test]
+fn directory_mode_strips_template_suffixes_and_keeps_html_escaping() {
+    let temp_dir = unique_temp_dir();
+    write_file(&temp_dir.join("data.json"), r#"{"s":"<b>&"}"#);
+    write_file(&temp_dir.join("tpl/page.html.tera"), "<p>{{ data.s }}</p>");
+    write_file(&temp_dir.join("tpl/notes.txt.j2"), "{{ data.s }}");
+    write_file(&temp_dir.join("tpl/plain.txt"), "{{ data.s }}");
+
+    let output = teraclio(
+        &temp_dir,
+        &["-s", "data.json", "-t", "tpl", "-d", "out", "-q"],
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    // .html.tera is still HTML: auto-escaped
+    assert_eq!(
+        fs::read_to_string(temp_dir.join("out/page.html")).unwrap(),
+        "<p>&lt;b&gt;&amp;</p>"
+    );
+    assert_eq!(
+        fs::read_to_string(temp_dir.join("out/notes.txt")).unwrap(),
+        "<b>&"
+    );
+    assert_eq!(
+        fs::read_to_string(temp_dir.join("out/plain.txt")).unwrap(),
+        "<b>&"
+    );
+    assert!(!temp_dir.join("out/page.html.tera").exists());
+
+    fs::remove_dir_all(temp_dir).expect("cleanup temp dir");
+}
+
+#[test]
+fn directory_mode_rejects_output_name_collisions() {
+    let temp_dir = unique_temp_dir();
+    write_file(&temp_dir.join("data.json"), "{}");
+    write_file(&temp_dir.join("tpl/cfg.yaml"), "a");
+    write_file(&temp_dir.join("tpl/cfg.yaml.tera"), "b");
+
+    let output = teraclio(&temp_dir, &["-s", "data.json", "-t", "tpl", "-d", "out"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("would both render to 'cfg.yaml'"),
+        "stderr was: {stderr}"
+    );
+
+    fs::remove_dir_all(temp_dir).expect("cleanup temp dir");
+}
+
+#[test]
+fn set_supports_dotted_keys_and_json_values() {
+    let temp_dir = unique_temp_dir();
+    write_file(
+        &temp_dir.join("data.json"),
+        r#"{"app":{"name":"api","port":80}}"#,
+    );
+    write_file(
+        &temp_dir.join("t.txt"),
+        r#"{{ data.app.name }}:{{ data.app.port }}:{{ data.app.replicas + 1 }}:{{ data.tags | join(sep=",") }}"#,
+    );
+
+    let output = teraclio(
+        &temp_dir,
+        &[
+            "-s",
+            "data.json",
+            "-t",
+            "t.txt",
+            "--set",
+            "app.name=web",
+            "--set-json",
+            "app.replicas=2",
+            "--set-json",
+            r#"tags=["a","b"]"#,
+        ],
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    // Sibling keys from the source (port) survive a nested --set
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "web:80:3:a,b");
+
+    let clash = teraclio(
+        &temp_dir,
+        &["-s", "data.json", "-t", "t.txt", "--set", "app.name.x=1"],
+    );
+    assert!(!clash.status.success());
+    assert!(String::from_utf8_lossy(&clash.stderr).contains("'app.name' is not an object"));
+
+    fs::remove_dir_all(temp_dir).expect("cleanup temp dir");
+}
+
+#[test]
+fn now_function_and_deprecated_strict_flag() {
+    let temp_dir = unique_temp_dir();
+    write_file(&temp_dir.join("data.json"), "{}");
+    write_file(
+        &temp_dir.join("t.txt"),
+        r#"{{ now(utc=true) | date_format(format="%Y") | int > 2000 }}"#,
+    );
+
+    let output = teraclio(&temp_dir, &["-s", "data.json", "-t", "t.txt", "--strict"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "true");
+
+    let help = teraclio(&temp_dir, &["--help"]);
+    assert!(!String::from_utf8_lossy(&help.stdout).contains("--strict"));
+
+    fs::remove_dir_all(temp_dir).expect("cleanup temp dir");
+}

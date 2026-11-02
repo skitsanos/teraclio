@@ -7,6 +7,12 @@ use tera::Error;
  * @author: skitsanos
  */
 pub fn filter_bytes_to_str(value: &Value, _args: &HashMap<String, Value>) -> Result<Value, Error> {
+    // Already text (e.g. base64_decode of UTF-8 data): keep
+    // `base64_decode | bytes_to_str` chains working unchanged.
+    if let Value::String(text) = value {
+        return Ok(Value::String(text.clone()));
+    }
+
     if let Value::Array(bytes) = value {
         let mut byte_vec: Vec<u8> = Vec::with_capacity(bytes.len());
         for (index, byte) in bytes.iter().enumerate() {
@@ -29,7 +35,9 @@ pub fn filter_bytes_to_str(value: &Value, _args: &HashMap<String, Value>) -> Res
         serde_json::to_value(result)
             .map_err(|err| Error::message(format!("Failed to serialize converted value: {err}")))
     } else {
-        Err(Error::message("Invalid input: expected an array of bytes"))
+        Err(Error::message(
+            "Invalid input: expected an array of bytes or a string",
+        ))
     }
 }
 
@@ -62,6 +70,12 @@ mod tests {
         let input = Value::Array(vec![json!("not-byte"), json!(1)]);
         let result = filter_bytes_to_str(&input, &HashMap::new());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn bytes_to_str_passes_strings_through() {
+        let input = json!("already text");
+        assert_eq!(filter_bytes_to_str(&input, &HashMap::new()).unwrap(), input);
     }
 
     #[test]

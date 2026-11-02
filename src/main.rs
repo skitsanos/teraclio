@@ -1,13 +1,16 @@
 use crate::cli::{generate_completions, Cli};
-use crate::engine::{absolute_path, TemplateEngine};
+use crate::engine::{absolute_path, output_name, TemplateEngine};
 use crate::error::{Result, TeraclioError};
+use crate::filters::FILTERS;
+use crate::functions::FUNCTIONS;
 use crate::utils::{parse_data_source, InputFormat};
 use clap::Parser;
 use notify::{recommended_watcher, Event, EventKind, RecursiveMode, Watcher};
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
@@ -15,57 +18,21 @@ mod cli;
 mod engine;
 mod error;
 mod filters;
+mod functions;
 mod utils;
-
-const AVAILABLE_FILTERS: &[(&str, &str)] = &[
-    // Hash & Security
-    ("md5", "Generate MD5 hash"),
-    ("sha1", "Generate SHA-1 hash"),
-    ("sha256", "Generate SHA-256 hash"),
-    ("hmac_sha256", "HMAC-SHA256 signing (arg: key)"),
-    // Encoding
-    ("base64_encode", "Encode to base64"),
-    ("base64_decode", "Decode from base64"),
-    ("url_encode", "URL-encode a string"),
-    ("url_decode", "URL-decode a string"),
-    // Escape
-    ("html_escape", "Escape HTML entities"),
-    ("html_unescape", "Unescape HTML entities"),
-    ("xml_escape", "Escape XML special characters"),
-    // Serialization
-    ("json_encode", "Serialize value to pretty JSON"),
-    ("yaml_encode", "Serialize value to YAML"),
-    // Text
-    ("truncate_words", "Truncate to N words (args: count, end)"),
-    (
-        "regex_replace",
-        "Regex find-and-replace (args: pattern, replacement)",
-    ),
-    // Case conversion
-    ("snake_case", "Convert to snake_case"),
-    ("kebab_case", "Convert to kebab-case"),
-    ("camel_case", "Convert to camelCase"),
-    ("pascal_case", "Convert to PascalCase"),
-    ("slug", "Convert to URL-friendly slug"),
-    // Date
-    ("date_format", "Parse and reformat dates (arg: format)"),
-    // UUID
-    ("uuid", "Generate a UUID v4"),
-    // Bytes
-    ("bytes_to_str", "Convert byte array to string"),
-    ("str_to_bytes", "Convert string to byte array"),
-];
 
 /**
  * Teraclio - CLI tool for template rendering with Tera
  * @author: skitsanos
  */
-fn main() -> Result<()> {
-    if let Err(e) = run() {
-        eprintln!("Error: {e}");
-        std::process::exit(1);
+fn main() -> ExitCode {
+    match run() {
+        Ok(code) => code,
+        Err(e) => {
+            eprintln!("Error: {e}");
+            ExitCode::FAILURE
+        }
     }
-    Ok(())
 }
 
 /**
@@ -137,28 +104,73 @@ fn parse_data(args: &Cli) -> Result<Value> {
         }
     }
 
-    // Inject ad-hoc variables from --set key=value options
+    // Inject ad-hoc variables: --set values are strings, --set-json values are
+    // parsed as JSON. --set-json runs second, so it wins on the same key.
     for entry in &args.set_vars {
-        if let Some(pos) = entry.find('=') {
-            let key = &entry[..pos];
-            let value = &entry[pos + 1..];
-            if let Value::Object(ref mut map) = json_data {
-                map.insert(key.to_string(), Value::String(value.to_string()));
-            } else {
-                return Err(TeraclioError::InvalidInput(
-                    "Cannot set variables: data source must be a JSON object when --set is used."
-                        .to_string(),
-                ));
-            }
-        } else {
-            return Err(TeraclioError::InvalidInput(format!(
-                "Invalid --set format '{}': expected KEY=VALUE",
-                entry
-            )));
-        }
+        let (key, value) = split_assignment(entry, "--set", "KEY=VALUE")?;
+        set_data_path(&mut json_data, key, Value::String(value.to_string()))?;
+    }
+    for entry in &args.set_json_vars {
+        let (key, raw) = split_assignment(entry, "--set-json", "KEY=JSON")?;
+        let value = serde_json::from_str(raw).map_err(|e| {
+            TeraclioError::InvalidInput(format!("Invalid JSON for --set-json {key}: {e}"))
+        })?;
+        set_data_path(&mut json_data, key, value)?;
     }
 
     Ok(json_data)
+}
+
+/**
+ * Split `KEY=VALUE` at the first '='
+ * @author: skitsanos
+ */
+fn split_assignment<'a>(entry: &'a str, flag: &str, shape: &str) -> Result<(&'a str, &'a str)> {
+    entry.split_once('=').ok_or_else(|| {
+        TeraclioError::InvalidInput(format!("Invalid {flag} format '{entry}': expected {shape}"))
+    })
+}
+
+/**
+ * Set a dotted key path (`app.db.port`) inside the data object, creating
+ * intermediate objects as needed. Refuses to replace a non-object on the way,
+ * which would silently discard data from the sources.
+ * @author: skitsanos
+ */
+fn set_data_path(data: &mut Value, key: &str, value: Value) -> Result<()> {
+    let segments: Vec<&str> = key.split('.').collect();
+    if segments.iter().any(|segment| segment.is_empty()) {
+        return Err(TeraclioError::InvalidInput(format!(
+            "Invalid key '{key}': empty segment"
+        )));
+    }
+    let Value::Object(root) = data else {
+        return Err(TeraclioError::InvalidInput(
+            "Cannot set variables: data source must be a JSON object when --set or --set-json is used."
+                .to_string(),
+        ));
+    };
+
+    let (last, parents) = segments
+        .split_last()
+        .expect("split always yields one segment");
+    let mut cursor = root;
+    for (depth, segment) in parents.iter().enumerate() {
+        let entry = cursor
+            .entry(segment.to_string())
+            .or_insert_with(|| Value::Object(serde_json::Map::new()));
+        cursor = match entry {
+            Value::Object(map) => map,
+            _ => {
+                return Err(TeraclioError::InvalidInput(format!(
+                    "Cannot set '{key}': '{}' is not an object",
+                    segments[..=depth].join(".")
+                )));
+            }
+        };
+    }
+    cursor.insert(last.to_string(), value);
+    Ok(())
 }
 
 /**
@@ -188,10 +200,11 @@ fn validate_output(content: &str, format: InputFormat) -> Result<()> {
 }
 
 /**
- * Show a unified diff between the rendered output and the existing destination file
+ * Show a unified diff between the rendered output and the existing destination
+ * file. Returns whether they differ (a missing destination always differs).
  * @author: skitsanos
  */
-fn show_diff(rendered: &str, dest_path: &Path, quiet: bool) -> Result<()> {
+fn show_diff(rendered: &str, dest_path: &Path, quiet: bool) -> Result<bool> {
     let existing = if dest_path.exists() {
         std::fs::read_to_string(dest_path)?
     } else {
@@ -211,20 +224,25 @@ fn show_diff(rendered: &str, dest_path: &Path, quiet: bool) -> Result<()> {
         if !quiet {
             eprintln!("[teraclio] No differences found.");
         }
-    } else {
-        print!("{unified}");
+        return Ok(false);
     }
 
-    Ok(())
+    print!("{unified}");
+    Ok(true)
 }
 
-fn handle_rendered_output(rendered: &str, output_path: Option<&Path>, args: &Cli) -> Result<()> {
+/**
+ * Validate, then check, diff, or write rendered output. Returns true only when
+ * --diff found a difference.
+ * @author: skitsanos
+ */
+fn handle_rendered_output(rendered: &str, output_path: Option<&Path>, args: &Cli) -> Result<bool> {
     if let Some(format) = args.output_format {
         validate_output(rendered, format)?;
     }
 
     if args.check {
-        return Ok(());
+        return Ok(false);
     }
 
     if args.diff {
@@ -235,36 +253,37 @@ fn handle_rendered_output(rendered: &str, output_path: Option<&Path>, args: &Cli
     }
 
     TemplateEngine::write_output(rendered, output_path)?;
-    Ok(())
+    Ok(false)
 }
 
-fn render_template(
-    template_path: &Path,
-    json_data: &Value,
-    output_path: Option<&Path>,
-    args: &Cli,
-) -> Result<()> {
-    // Data sources and the output file share the template's directory often
-    // enough that they must not be parsed as sibling templates.
-    let mut exclude: Vec<PathBuf> = args
-        .json_source
+/**
+ * Data source files, which share a template's directory often enough that
+ * they must never be parsed as templates themselves.
+ * @author: skitsanos
+ */
+fn source_paths(args: &Cli) -> Vec<PathBuf> {
+    args.json_source
         .iter()
         .filter(|source| source.as_str() != "-")
         .map(PathBuf::from)
-        .collect();
-    exclude.extend(output_path.map(Path::to_path_buf));
+        .collect()
+}
 
+/**
+ * Load one template (plus its siblings) and render it
+ * @author: skitsanos
+ */
+fn render_file(template_path: &Path, json_data: &Value, exclude: &[PathBuf]) -> Result<String> {
     let mut engine = TemplateEngine::new();
-    engine.load_template(template_path, &exclude)?;
-    let rendered = engine.render(template_path, json_data)?;
-    handle_rendered_output(&rendered, output_path, args)
+    engine.load_template(template_path, exclude)?;
+    engine.render(template_path, json_data)
 }
 
 /**
  * Render template once with the given arguments
  * @author: skitsanos
  */
-fn render_once(args: &Cli) -> Result<()> {
+fn render_once(args: &Cli) -> Result<bool> {
     let json_data = parse_data(args)?;
     let template_path = Path::new(require_template_path(args)?);
     let output_path = args.output_file.as_ref().map(Path::new);
@@ -275,14 +294,17 @@ fn render_once(args: &Cli) -> Result<()> {
             ));
         }
     }
-    render_template(template_path, &json_data, output_path, args)
+    let mut exclude = source_paths(args);
+    exclude.extend(output_path.map(Path::to_path_buf));
+    let rendered = render_file(template_path, &json_data, &exclude)?;
+    handle_rendered_output(&rendered, output_path, args)
 }
 
 /**
  * Process a directory of templates in one pass
  * @author: skitsanos
  */
-fn run_directory_mode(template_dir: &Path, args: &Cli, json_data: &Value) -> Result<()> {
+fn run_directory_mode(template_dir: &Path, args: &Cli, json_data: &Value) -> Result<bool> {
     let dest_dir = args.output_file.as_ref().map(Path::new);
     if !args.check && dest_dir.is_none() {
         return Err(TeraclioError::InvalidInput(
@@ -301,9 +323,12 @@ fn run_directory_mode(template_dir: &Path, args: &Cli, json_data: &Value) -> Res
         args,
         json_data,
         dest_root,
+        sources: source_paths(args),
         visited: HashSet::new(),
+        differs: false,
     };
-    walk.process(template_dir, dest_dir.map(Path::to_path_buf))
+    walk.process(template_dir, dest_dir.map(Path::to_path_buf))?;
+    Ok(walk.differs)
 }
 
 /**
@@ -316,8 +341,12 @@ struct DirectoryWalk<'a> {
     /// Absolute destination root; never descended into, so a destination
     /// inside the template tree is not rendered again on every level.
     dest_root: Option<PathBuf>,
+    /// Data source files, never parsed as templates.
+    sources: Vec<PathBuf>,
     /// Canonical directories already processed, which breaks symlink cycles.
     visited: HashSet<PathBuf>,
+    /// Whether --diff found any difference.
+    differs: bool,
 }
 
 impl DirectoryWalk<'_> {
@@ -345,9 +374,10 @@ impl DirectoryWalk<'_> {
         // Deterministic order for output messages and error reporting
         entries.sort_by_key(|entry| entry.file_name());
 
+        let mut templates = Vec::new();
+        let mut outputs: HashMap<String, String> = HashMap::new();
         for entry in entries {
             let path = entry.path();
-
             let file_name = match entry.file_name().to_str() {
                 Some(name) if name.starts_with('.') => continue,
                 Some(name) => name.to_string(),
@@ -362,8 +392,31 @@ impl DirectoryWalk<'_> {
                 continue;
             }
 
-            let output_path = dest_dir.as_ref().map(|dir| dir.join(&file_name));
-            render_template(&path, self.json_data, output_path.as_deref(), self.args)?;
+            // page.html.tera -> page.html; refuse to let two templates race for one file
+            let output = output_name(&file_name).to_string();
+            if let Some(other) = outputs.insert(output.clone(), file_name.clone()) {
+                return Err(TeraclioError::InvalidInput(format!(
+                    "'{other}' and '{file_name}' in {} would both render to '{output}'",
+                    template_dir.display()
+                )));
+            }
+            templates.push((path, file_name, output));
+        }
+
+        // One engine per directory: every template is parsed once, not once
+        // per sibling render.
+        let mut engine = TemplateEngine::new();
+        let loaded = engine.load_directory(template_dir, &self.sources);
+
+        for (path, file_name, output) in templates {
+            let output_path = dest_dir.as_ref().map(|dir| dir.join(&output));
+            let rendered = if loaded.contains(&file_name) {
+                engine.render_named(&file_name, self.json_data)?
+            } else {
+                // Did not parse: load it alone to surface the real error
+                render_file(&path, self.json_data, &self.sources)?
+            };
+            self.differs |= handle_rendered_output(&rendered, output_path.as_deref(), self.args)?;
             info(self.args, &format!("[teraclio] Processed: {file_name}"));
         }
 
@@ -371,7 +424,11 @@ impl DirectoryWalk<'_> {
     }
 }
 
-fn execute(args: &Cli) -> Result<()> {
+/**
+ * Render once in file or directory mode. Returns whether --diff found changes.
+ * @author: skitsanos
+ */
+fn execute(args: &Cli) -> Result<bool> {
     let template_path = Path::new(require_template_path(args)?);
 
     if template_path.is_dir() {
@@ -406,37 +463,47 @@ fn info(args: &Cli, msg: &str) {
  * Main application logic with proper error handling
  * @author: skitsanos
  */
-fn run() -> Result<()> {
+fn run() -> Result<ExitCode> {
     let args = Cli::parse();
 
     // Generate shell completions and exit
     if let Some(shell) = args.completions {
         generate_completions(shell);
-        return Ok(());
+        return Ok(ExitCode::SUCCESS);
     }
 
     // List all available filters and exit
     if args.list_filters {
-        println!("Available filters ({}):\n", AVAILABLE_FILTERS.len());
-        let max_name = AVAILABLE_FILTERS
+        let width = FILTERS
             .iter()
-            .map(|(n, _)| n.len())
+            .map(|spec| spec.name.len())
+            .chain(FUNCTIONS.iter().map(|(name, _)| name.len() + 2))
             .max()
             .unwrap_or(0);
-        for (name, description) in AVAILABLE_FILTERS {
-            println!("  {name:<max_name$}  {description}");
+        println!("Available filters ({}):\n", FILTERS.len());
+        for spec in FILTERS {
+            println!("  {:<width$}  {}", spec.name, spec.description);
         }
-        return Ok(());
+        println!("\nAvailable functions ({}):\n", FUNCTIONS.len());
+        for (name, description) in FUNCTIONS {
+            println!("  {:<width$}  {description}", format!("{name}()"));
+        }
+        return Ok(ExitCode::SUCCESS);
     }
 
     let template_path = Path::new(require_template_path(&args)?);
 
     if !args.watch {
-        execute(&args)?;
+        let differs = execute(&args)?;
         if args.check {
             info(&args, "Template render check passed.");
         }
-        return Ok(());
+        // Like diff(1): exit 1 when --diff found changes, so CI can gate on drift
+        return Ok(if differs {
+            ExitCode::from(1)
+        } else {
+            ExitCode::SUCCESS
+        });
     }
 
     // Reject stdin before rendering, so the data is not consumed for nothing
@@ -449,12 +516,12 @@ fn run() -> Result<()> {
     // In watch mode a broken first render is reported, not fatal: the user is
     // about to fix the template or data, and the watcher should pick that up.
     match execute(&args) {
-        Ok(()) if args.check => info(&args, "Template render check passed."),
-        Ok(()) => {}
+        Ok(_) if args.check => info(&args, "Template render check passed."),
+        Ok(_) => {}
         Err(e) => eprintln!("[teraclio] Render error: {e}"),
     }
 
-    watch(&args, template_path)
+    watch(&args, template_path).map(|()| ExitCode::SUCCESS)
 }
 
 /**
@@ -628,9 +695,30 @@ fn watch(args: &Cli, template_path: &Path) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{absolute_path, Cli, WatchPlan};
+    use super::{absolute_path, set_data_path, Cli, WatchPlan};
     use clap::Parser;
+    use serde_json::json;
     use std::path::Path;
+
+    #[test]
+    fn set_data_path_nests_and_preserves_siblings() {
+        let mut data = json!({"app": {"port": 80}});
+        set_data_path(&mut data, "app.db.host", json!("pg")).unwrap();
+        set_data_path(&mut data, "top", json!(1)).unwrap();
+        assert_eq!(
+            data,
+            json!({"app": {"port": 80, "db": {"host": "pg"}}, "top": 1})
+        );
+    }
+
+    #[test]
+    fn set_data_path_rejects_bad_keys_and_non_objects() {
+        let mut data = json!({"app": "string"});
+        assert!(set_data_path(&mut data, "app.port", json!(1)).is_err());
+        assert!(set_data_path(&mut data, ".x", json!(1)).is_err());
+        assert!(set_data_path(&mut data, "x.", json!(1)).is_err());
+        assert!(set_data_path(&mut json!([1]), "x", json!(1)).is_err());
+    }
 
     fn plan(args: &[&str]) -> WatchPlan {
         let cli = Cli::parse_from(std::iter::once("teraclio").chain(args.iter().copied()));

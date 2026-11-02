@@ -57,10 +57,8 @@ pub struct Cli {
     #[arg(long = "check", help = "Validate the template without rendering")]
     pub check: bool,
 
-    #[arg(
-        long = "strict",
-        help = "Deprecated compatibility flag retained for backward compatibility. It currently has no effect."
-    )]
+    /// Deprecated no-op, accepted so existing scripts keep working; hidden from --help
+    #[arg(long = "strict", hide = true)]
     pub strict: bool,
 
     #[arg(
@@ -73,10 +71,18 @@ pub struct Cli {
     #[arg(
         long = "set",
         value_name = "KEY=VALUE",
-        help = "Set a template variable (can be used multiple times)",
+        help = "Set data.KEY to a string; dotted keys nest (app.port=8080). Repeatable",
         num_args = 1
     )]
     pub set_vars: Vec<String>,
+
+    #[arg(
+        long = "set-json",
+        value_name = "KEY=JSON",
+        help = "Set data.KEY to a JSON value (replicas=3, tags='[\"a\"]'); applied after --set. Repeatable",
+        num_args = 1
+    )]
+    pub set_json_vars: Vec<String>,
 
     #[arg(
         long = "quiet",
