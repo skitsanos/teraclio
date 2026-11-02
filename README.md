@@ -21,7 +21,7 @@ teraclio --source data.json --template template.txt
 
 - 🚀 **Fast & Lightweight** - Single binary with no dependencies
 - 📝 **Powerful Templating** - Full Tera template engine support
-- 🔧 **Extensive Filter Library** - 24 custom filters for data transformation
+- 🔧 **Extensive Filter Library** - 24 custom filters for data transformation, plus a `now()` function
 - 📊 **Multi-Format Input** - JSON, YAML, TOML with auto-detection
 - 🌍 **Cross-Platform** - Linux (glibc & musl), macOS (Intel & Apple Silicon), Windows
 - ⚡ **Flexible output** - File output or stdout, with input format detection
@@ -57,11 +57,11 @@ teraclio --source <data-file> --template <template-file> [OPTIONS]
 | `--dest, -d` | ❌ | Output file or directory (stdout if omitted) |
 | `--format, -f` | ❌ | Input format (auto-detected; required for stdin) |
 | `--env-vars` | ❌ | Include environment variables as `data.env` |
-| `--set KEY=VALUE` | ❌ | Set template variables from CLI (repeatable) |
+| `--set KEY=VALUE` | ❌ | Set `data.KEY` to a string; dotted keys nest (`app.port=8080`). Repeatable |
+| `--set-json KEY=JSON` | ❌ | Set `data.KEY` to a JSON value (`replicas=3`, `tags='["a"]'`). Repeatable |
 | `--check` | ❌ | Render the template to validate it, without writing output |
-| `--diff` | ❌ | Show diff vs destination file instead of writing |
+| `--diff` | ❌ | Show diff vs destination instead of writing; exits 1 if they differ |
 | `--watch, -w` | ❌ | Watch files and re-render on changes |
-| `--strict` | ❌ | Deprecated no-op, kept for backward compatibility (undefined variables always fail) |
 | `--output-format` | ❌ | Validate output is well-formed (json, yaml, toml) |
 | `--recursive, -r` | ❌ | Process template directories recursively |
 | `--quiet, -q` | ❌ | Suppress informational messages |
@@ -74,8 +74,10 @@ Notes:
 - `--format` applies to every `--source`, not just stdin.
 - `--source -` reads JSON/YAML/TOML data from stdin; `--format` is required in this mode, and `-` must be the last source.
 - Multiple `--source` flags are deep-merged, with later sources overriding earlier ones.
-- `--set` values are always strings and override top-level keys after merging.
-- `--env-vars` and `--set` require the merged data root to be an object.
+- `--set` values are strings and `--set-json` values are typed; both apply after merging, and `--set-json` runs last.
+- `--env-vars`, `--set`, and `--set-json` require the merged data root to be an object.
+- Output files are written atomically, and missing parent directories of `--dest` are created.
+- Directory mode drops a `.tera`, `.j2`, `.jinja`, or `.jinja2` suffix from output names (`config.yaml.tera` → `config.yaml`).
 - Templates ending in `.html`, `.htm`, or `.xml` are auto-escaped by Tera; use `| safe` to emit raw markup.
 
 ## Quick Examples
@@ -87,7 +89,12 @@ teraclio -s base.json -s overrides.json -t template.txt
 
 ### Set Variables from CLI
 ```bash
-teraclio -s data.json -t template.txt --set version=2.0
+teraclio -s data.json -t template.txt --set version=2.0 --set app.port=8080 --set-json replicas=3
+```
+
+### Timestamps
+```jinja2
+Generated: {{ now(utc=true) | date_format(format="%Y-%m-%d %H:%M UTC") }}
 ```
 
 ### Watch Mode
@@ -110,6 +117,7 @@ teraclio -s data.json -t templates/ -d output/ -r
 
 ### Diff Mode
 ```bash
+# Exits 1 when the rendered output differs from existing.txt: use it to fail CI on drift
 teraclio -s data.json -t template.txt -d existing.txt --diff
 ```
 
@@ -181,6 +189,9 @@ Teraclio extends Tera with 24 custom filters organized by category:
 
 **Data Conversion**
 - `bytes_to_str` / `str_to_bytes` - Bytes/string conversion
+
+**Functions**
+- `now()` - Current time as RFC 3339 (`utc=true` for UTC, `timestamp=true` for Unix seconds)
 
 See [Custom Filters Documentation](docs/custom-filters.md) for complete details and examples.
 

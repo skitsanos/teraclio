@@ -17,11 +17,11 @@ teraclio --source <data-file> --template <template-file> [OPTIONS]
 | `--dest` | `-d` | No | Output file or directory |
 | `--format` | `-f` | No | Input format (json, yaml, toml). Auto-detected from file extension; required for stdin and for unrecognised extensions. Applies to every `--source` |
 | `--env-vars` | - | No | Include environment variables as `data.env` object |
-| `--set KEY=VALUE` | - | No | Set a string value at `data.KEY`, overriding merged sources (repeatable) |
+| `--set KEY=VALUE` | - | No | Set `data.KEY` to a string, overriding merged sources. Dotted keys nest. Repeatable |
+| `--set-json KEY=JSON` | - | No | Like `--set`, but the value is parsed as JSON (number, bool, array, object). Applied after `--set`. Repeatable |
 | `--check` | - | No | Render the template to validate it, but write nothing |
-| `--diff` | - | No | Print a unified diff against the `--dest` file instead of writing it (`--dest` required) |
+| `--diff` | - | No | Print a unified diff against the `--dest` file instead of writing it (`--dest` required). Exits 1 if anything differs |
 | `--watch` | `-w` | No | Watch source/template for changes and re-render automatically |
-| `--strict` | - | No | Deprecated no-op kept for compatibility; undefined variables always fail |
 | `--output-format` | - | No | Validate rendered output format (json, yaml, toml) |
 | `--recursive` | `-r` | No | Recurse into subdirectories in directory mode |
 | `--quiet` | `-q` | No | Suppress stderr informational messages |
@@ -79,12 +79,18 @@ teraclio -s base.json -s production.json -t app-config.yaml -d config.yaml
 # They are available as {{ data.version }} and {{ data.stage }}
 teraclio -s data.json -t template.txt --set version=2.0.1 --set stage=production
 
-# Values are always strings: --set build_number=42 yields "42", not 42.
-# A --source is still required; --set only adds top-level keys to it.
-teraclio -s defaults.yaml -t template.txt --set build_number=42 --set commit_sha=abc123
+# Dotted keys nest into the data, keeping sibling keys from the sources:
+# sets data.app.db.host and leaves data.app.name alone
+teraclio -s app.yaml -t template.txt --set app.db.host=db.internal
 
-# Stamp a render time (Tera 2 has no now() function)
-teraclio -s data.json -t template.txt --set generated_at="$(date -u +'%Y-%m-%d %H:%M')"
+# --set values are always strings: --set build_number=42 yields "42".
+# Use --set-json for numbers, booleans, arrays, and objects:
+teraclio -s app.yaml -t template.txt --set-json replicas=3 --set-json debug=true \
+  --set-json 'tags=["web","prod"]'
+
+# A --source is still required. --set-json is applied after --set, so it wins
+# when both name the same key. Setting a key below a non-object
+# (app.name.x when app.name is a string) is an error.
 ```
 
 #### Template Validation with --check
@@ -101,8 +107,12 @@ teraclio -s config.yaml -t deployment.yaml --check && echo "Template OK"
 # Preview changes before overwriting an existing file
 teraclio -s data.json -t template.txt -d output.txt --diff
 
-# Useful in code review or dry-run workflows
-teraclio -s config.yaml -t k8s-deployment.yaml -d deployment.yaml --diff
+# Exit status: 0 = identical, 1 = differs (or error). Fail CI when committed
+# output has drifted from its template:
+teraclio -s config.yaml -t k8s-deployment.yaml.tera -d deployment.yaml --diff -q
+
+# Works in directory mode too: exits 1 if any file differs
+teraclio -s data.json -t templates/ -d output/ -r --diff
 ```
 
 #### Watch Mode
@@ -125,6 +135,20 @@ teraclio -s data.json -t templates/ -d output/
 # Recurse into subdirectories
 teraclio -s data.json -t templates/ -d output/ --recursive
 ```
+
+Every non-hidden file in the directory is a template. Output names drop a
+`.tera`, `.j2`, `.jinja`, or `.jinja2` suffix, so `templates/config.yaml.tera`
+renders to `output/config.yaml`. If two templates would produce the same output
+name (`config.yaml` and `config.yaml.tera`), the run fails rather than letting
+one overwrite the other. Templates in the same directory can include each other.
+
+#### Output Files
+
+Files written with `--dest` are replaced atomically: Teraclio writes a hidden
+temporary file next to the destination and renames it into place, so a dev
+server or watcher never reads a half-written file. Missing parent directories
+are created. If the destination is a symlink, its target is updated and the
+link is kept, and an existing file's permissions are preserved.
 
 #### Output Format Validation
 ```bash
@@ -201,7 +225,7 @@ Create `template.txt`:
 ```jinja2
 Issues Report for {{ data.repo }}
 Project: {{ data.project }}
-Generated: {{ data.generated_at }}
+Generated: {{ now() | date_format(format="%Y-%m-%d %H:%M") }}
 
 {% for issue in data.issues %}
 {{ loop.index }}. {{ issue.component }}
@@ -215,8 +239,7 @@ Total Issues: {{ data.issues | length }}
 
 ### 3. Generate Report
 ```bash
-teraclio --source report.json --template template.txt --dest issues-report.txt \
-  --set generated_at="$(date -u +'%Y-%m-%d %H:%M')"
+teraclio --source report.json --template template.txt --dest issues-report.txt
 ```
 
 ## Data Access
@@ -346,5 +369,7 @@ teraclio -s data.json -t templates/ -d dist/ --recursive --watch
 
 ## Exit Codes
 
-- `0`: Success
-- `1`: Error (file not found, parsing error, template error, etc.)
+- `0`: Success (with `--diff`: no differences)
+- `1`: Error (file not found, parsing error, template error, etc.), or `--diff` found differences
+
+`--strict` is still accepted for backward compatibility but does nothing (undefined variables always fail) and is hidden from `--help`.

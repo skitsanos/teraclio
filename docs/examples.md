@@ -94,7 +94,7 @@ Tera 2 has no `map`/`sum` filters, so the total is accumulated with `set_global`
 **Template** (`app.conf`):
 ```jinja2
 # {{ data.app.name }} Configuration
-# Generated on {{ data.generated_at }}
+# Generated on {{ now() | date_format(format="%Y-%m-%d %H:%M:%S") }}
 
 [application]
 name = {{ data.app.name }}
@@ -118,8 +118,7 @@ log_level = {{ data.env.LOG_LEVEL | default(value="info") }}
 
 **Command**:
 ```bash
-teraclio -s config-data.json -t app.conf --env-vars \
-  --set generated_at="$(date -u +'%Y-%m-%d %H:%M:%S')"
+teraclio -s config-data.json -t app.conf --env-vars
 ```
 
 ### HTML Report Generation
@@ -346,8 +345,8 @@ Message {{ msg.id }} from {{ msg.sender }}:
   Bytes: {{ msg.content | str_to_bytes | length }} bytes
 {% elif msg.encoded %}
   Encoded: {{ msg.encoded }}
-  Decoded: {{ msg.encoded | base64_decode | bytes_to_str }}
-  Hash: {{ msg.encoded | base64_decode | bytes_to_str | sha256 }}
+  Decoded: {{ msg.encoded | base64_decode }}
+  Hash: {{ msg.encoded | base64_decode | sha256 }}
 {% endif %}
 
 {% endfor %}
