@@ -69,13 +69,21 @@ Decoded: {{ data.encoded_url | url_decode }}
 ```jinja2
 Safe HTML: {{ data.user_content | html_escape }}
 ```
-**Example**: `<script>alert('xss')</script>` → `&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;`
+**Example**: `<script>alert('xss')</script>` → `&lt;script&gt;alert('xss')&lt;/script&gt;`
+
+Escapes `&`, `<`, and `>` only (text-content escaping). Quotes are **not** escaped, so the output is not safe inside HTML attribute values; use Tera's built-in `escape_html` there. In `.html`/`.htm`/`.xml` templates Tera already auto-escapes output, and adding `html_escape` escapes twice.
 
 ### `xml_escape`
 ```jinja2
 Safe XML: {{ data.xml_content | xml_escape }}
 ```
-Escapes XML special characters for safe embedding.
+Escapes `&`, `<`, and `>` for XML text content. Like `html_escape`, it leaves quotes alone; use Tera's built-in `escape_xml` for attribute values.
+
+### `html_unescape`
+```jinja2
+{{ data.encoded_html | html_unescape }}
+```
+Decodes HTML entities: `&lt;b&gt;Tom &amp; Jerry&lt;/b&gt;` → `<b>Tom & Jerry</b>`.
 
 ## String Transformation Filters
 
@@ -107,7 +115,7 @@ Convert between different naming conventions.
 
 ### `slug`
 ```jinja2
-{{ "Hello World!" | slug }}
+{{ "Hello World" | slug }}
 ```
 **Output**: `hello-world`
 
@@ -119,7 +127,7 @@ Serialize data structures into standard text formats.
 ```jinja2
 {{ data.config | json_encode }}
 ```
-Serializes any value to pretty-printed JSON string.
+Serializes any value to a pretty-printed (multi-line) JSON string. Strings come out quoted and escaped, so embed the result directly: write `"name": {{ data.name | json_encode }}`, not `"name": "{{ data.name | json_encode }}"`.
 
 ### `yaml_encode`
 ```jinja2
@@ -183,7 +191,7 @@ Converts `"Hi"` to `[72, 105]`
 ### Security Token Generation
 ```jinja2
 User: {{ data.username }}
-Token: {{ (data.username + ":" + data.timestamp) | sha256 }}
+Token: {{ (data.username ~ ":" ~ data.timestamp) | sha256 }}
 API Key: {{ data.api_secret | base64_encode }}
 ```
 
@@ -200,7 +208,7 @@ CSS Class: {{ data.component_name | kebab_case }}
 {{ loop.index }}. Processing {{ record.filename | pascal_case }}
    Hash: {{ record.content | sha256 }}
    Size: {{ record.content | length }} chars
-   Encoded: {{ record.content | base64_encode | truncate(length=20) }}...
+   Encoded: {{ record.content | base64_encode | truncate(length=20) }}
 {% endfor %}
 ```
 
@@ -208,7 +216,7 @@ CSS Class: {{ data.component_name | kebab_case }}
 ```jinja2
 {
   "user_id": "{{ data.user.id }}",
-  "display_name": "{{ data.user.name | html_escape }}",
+  "display_name": {{ data.user.name | json_encode }},
   "profile_url": "/users/{{ data.user.name | url_encode }}",
   "avatar_hash": "{{ data.user.email | md5 }}",
   "api_version": "{{ data.version | snake_case }}"
@@ -220,7 +228,7 @@ CSS Class: {{ data.component_name | kebab_case }}
 # Generated configuration
 {% for service in data.services %}
 [service.{{ service.name | snake_case }}]
-endpoint = "{{ service.url | url_encode }}"
+endpoint = "{{ service.url }}"
 api_key_hash = "{{ service.api_key | sha256 }}"
 display_name = "{{ service.name | pascal_case }}"
 {% endfor %}
@@ -229,7 +237,7 @@ display_name = "{{ service.name | pascal_case }}"
 ### Webhook Signing
 ```jinja2
 {
-  "payload": "{{ data.body | json_encode }}",
+  "payload": {{ data.body | json_encode }},
   "signature": "{{ data.body | hmac_sha256(key=data.webhook_secret) }}",
   "request_id": "{{ "" | uuid }}",
   "timestamp": "{{ data.sent_at | date_format(format="%Y-%m-%dT%H:%M:%SZ") }}"
@@ -266,12 +274,12 @@ All custom filters integrate seamlessly with Tera's built-in filters:
 ```jinja2
 {# Chain multiple transformations #}
 {{ data.api_name | snake_case | upper }}
-{{ data.user_input | html_escape | truncate(length=50) }}
+{{ data.user_input | truncate(length=50) | html_escape }}
 
 {# Complex data processing #}
 {% for item in data.items %}
 {{ loop.index }}. {{ item.name | pascal_case }}
-   Hash: {{ item.content | sha256 | truncate(length=16) }}...
+   Hash: {{ item.content | sha256 | truncate(length=16) }}
    URL: /api/{{ item.name | kebab_case }}/{{ item.id }}
 {% endfor %}
 
@@ -302,12 +310,7 @@ Invalid operations will result in clear template errors with descriptive message
 
 ## Performance Notes
 
-- Hash and HMAC operations are cryptographically secure but computationally expensive
-- Case conversions are optimized for common ASCII strings
-- URL and HTML escaping use efficient lookup tables
-- Base64 operations use standard library implementations
-- Serialization filters use standard JSON/YAML libraries
-- Regex replace compiles patterns per invocation; avoid complex patterns in tight loops
-- Date parsing attempts multiple formats in sequence
+- Regex replace compiles its pattern on every call; avoid complex patterns in tight loops
+- `date_format` tries RFC 3339, then `YYYY-MM-DDTHH:MM:SS`, then `YYYY-MM-DD`, in that order
 
-For high-volume template rendering, consider caching computed hashes and avoiding repeated expensive operations in loops.
+Hashing is cheap at template scale; the main cost to watch is `regex_replace` inside large loops.

@@ -9,9 +9,10 @@ Welcome to the Teraclio documentation! This directory contains comprehensive gui
 
 ## Template Development
 
-3. **[Tera Template Basics](tera-basics.md)** - Complete guide to Tera template syntax
-4. **[Custom Filters](custom-filters.md)** - Teraclio's additional filters for data transformation
+3. **[Tera Template Basics](tera-basics.md)** - Tera 2 template syntax, built-ins, and gotchas
+4. **[Custom Filters](custom-filters.md)** - Teraclio's 24 additional filters
 5. **[Examples](examples.md)** - Real-world usage scenarios and templates
+6. **[Use Cases](use-cases.md)** - End-to-end CI/CD, IaC, reporting, and docs generation
 
 ## Quick Reference
 
@@ -22,8 +23,15 @@ Welcome to the Teraclio documentation! This directory contains comprehensive gui
 - `{{ value | filter }}` - Apply filters
 
 ### Custom Filters
-- `base64_encode` / `base64_decode` - Base64 operations
-- `bytes_to_str` / `str_to_bytes` - Bytes/string conversion
+- Hashing: `md5`, `sha1`, `sha256`, `hmac_sha256(key=...)`
+- Encoding: `base64_encode`, `base64_decode`, `url_encode`, `url_decode`
+- Escaping: `html_escape`, `html_unescape`, `xml_escape`
+- Serialization: `json_encode`, `yaml_encode`
+- Text: `truncate_words(count=...)`, `regex_replace(pattern=..., replacement=...)`
+- Case: `snake_case`, `kebab_case`, `camel_case`, `pascal_case`, `slug`
+- Other: `date_format(format=...)`, `uuid`, `bytes_to_str`, `str_to_bytes`
+
+Run `teraclio --list-filters` for the same list from the binary.
 
 ### Command Line
 ```bash
@@ -33,7 +41,7 @@ teraclio --source data.json --template template.txt [--dest output.txt]
 ## External Resources
 
 - [Tera Template Engine](https://keats.github.io/tera/) - Official documentation
-- [Jinja2 Documentation](https://jinja.palletsprojects.com/) - Similar syntax reference
+- [Jinja2 Documentation](https://jinja.palletsprojects.com/) - Similar syntax, but Jinja2/Tera 1 idioms such as `+` string concatenation, positional filter arguments, `.items()`, and macros do not work in Tera 2
 - [JSON Specification](https://www.json.org/) - Data format specification
 
 ## Contributing to Documentation

@@ -15,13 +15,13 @@ teraclio --source <data-file> --template <template-file> [OPTIONS]
 | `--source` | `-s` | Yes | Data file path(s), repeatable, or `-` for stdin |
 | `--template` | `-t` | Yes | Template file or directory path |
 | `--dest` | `-d` | No | Output file or directory |
-| `--format` | `-f` | No | Input format (json, yaml, toml) - auto-detected from file extension, required when reading from stdin or files with unknown extension |
+| `--format` | `-f` | No | Input format (json, yaml, toml). Auto-detected from file extension; required for stdin and for unrecognised extensions. Applies to every `--source` |
 | `--env-vars` | - | No | Include environment variables as `data.env` object |
-| `--set KEY=VALUE` | - | No | Set template variables directly (repeatable) |
-| `--check` | - | No | Validate template without rendering |
-| `--diff` | - | No | Show diff against existing destination file |
+| `--set KEY=VALUE` | - | No | Set a string value at `data.KEY`, overriding merged sources (repeatable) |
+| `--check` | - | No | Render the template to validate it, but write nothing |
+| `--diff` | - | No | Print a unified diff against the `--dest` file instead of writing it (`--dest` required) |
 | `--watch` | `-w` | No | Watch source/template for changes and re-render automatically |
-| `--strict` | - | No | Enable strict mode (undefined variables cause errors) |
+| `--strict` | - | No | Deprecated no-op kept for compatibility; undefined variables always fail |
 | `--output-format` | - | No | Validate rendered output format (json, yaml, toml) |
 | `--recursive` | `-r` | No | Recurse into subdirectories in directory mode |
 | `--quiet` | `-q` | No | Suppress stderr informational messages |
@@ -76,15 +76,20 @@ teraclio -s base.json -s production.json -t app-config.yaml -d config.yaml
 #### Ad-Hoc Variables with --set
 ```bash
 # Set individual template variables from the command line
-teraclio -s data.json -t template.txt --set version=2.0.1 --set env=production
+# They are available as {{ data.version }} and {{ data.stage }}
+teraclio -s data.json -t template.txt --set version=2.0.1 --set stage=production
 
-# Use --set without a source file for simple variable injection
+# Values are always strings: --set build_number=42 yields "42", not 42.
+# A --source is still required; --set only adds top-level keys to it.
 teraclio -s defaults.yaml -t template.txt --set build_number=42 --set commit_sha=abc123
+
+# Stamp a render time (Tera 2 has no now() function)
+teraclio -s data.json -t template.txt --set generated_at="$(date -u +'%Y-%m-%d %H:%M')"
 ```
 
 #### Template Validation with --check
 ```bash
-# Validate that a template is syntactically correct without rendering
+# Render the template against real data and fail on any error, without writing output
 teraclio -s data.json -t template.txt --check
 
 # Useful in CI to catch template errors early
@@ -148,9 +153,11 @@ teraclio --completions zsh > ~/.zfunc/_teraclio
 
 #### Template Includes
 ```bash
-# Templates can include other templates using Tera's include tag
+# Templates can include (or extend) other templates using Tera's include tag
 # Given a template that contains: {% include "header.html" %}
-# Teraclio resolves includes relative to the template's directory
+# Teraclio registers every file in the template's own directory under its bare
+# file name, so header.html must sit next to page.html. Subdirectory paths such
+# as {% include "partials/header.html" %} are not resolved.
 teraclio -s data.json -t templates/page.html -d output.html
 ```
 
@@ -160,6 +167,8 @@ teraclio -s data.json -t templates/page.html -d output.html
 teraclio -s data.json -t template.txt --env-vars
 
 # Template can access: {{ data.env.HOME }}, {{ data.env.USER }}, etc.
+# Missing variables fail the render; guard optional ones with default:
+#   {{ data.env.BUILD_ID | default(value="local") }}
 ```
 
 #### Using Short Arguments
@@ -188,7 +197,7 @@ Create `template.txt`:
 ```jinja2
 Issues Report for {{ data.repo }}
 Project: {{ data.project }}
-Generated: {{ now() | date(format="%Y-%m-%d %H:%M") }}
+Generated: {{ data.generated_at }}
 
 {% for issue in data.issues %}
 {{ loop.index }}. {{ issue.component }}
@@ -202,7 +211,8 @@ Total Issues: {{ data.issues | length }}
 
 ### 3. Generate Report
 ```bash
-teraclio --source report.json --template template.txt --dest issues-report.txt
+teraclio --source report.json --template template.txt --dest issues-report.txt \
+  --set generated_at="$(date -u +'%Y-%m-%d %H:%M')"
 ```
 
 ## Data Access
@@ -237,42 +247,45 @@ count: 3
 
 #### TOML Format
 ```toml
+# Top-level keys must come before the first [table]
+items = ["apple", "banana", "cherry"]
+count = 3
+
 [user]
 name = "John Doe"
 email = "john@example.com"
-
-items = ["apple", "banana", "cherry"]
-count = 3
 ```
 
 ### Template Access
 ```jinja2
 User: {{ data.user.name }} ({{ data.user.email }})
-Items: {{ data.items | join(", ") }}
+Items: {{ data.items | join(sep=", ") }}
 Count: {{ data.count }}
 
 # Environment variables (when --env-vars is used)
 Home: {{ data.env.HOME }}
 User: {{ data.env.USER }}
 
-# Ad-hoc variables (when --set is used)
-Version: {{ version }}
+# Ad-hoc variables (when --set is used): also under data
+Version: {{ data.version }}
 ```
 
 ## Error Handling
 
-Teraclio provides clear error messages for common issues:
+Teraclio prints errors to stderr as `Error: ...` and exits with code 1. Validation errors carry an `Invalid input:` prefix. Common messages:
 
 - **File not found**: `Data source file does not exist: /path/to/file.json`
 - **Empty file**: `Data source file is empty`
-- **Invalid format**: `YAML parsing error: expected value at line 1 column 1`
-- **Template error**: `Template error: Variable 'missing_var' not found`
+- **Invalid format**: `YAML parsing error: expected a node but found Value at line 2 column 4` (JSON: `JSON parsing error: ...`, TOML: `TOML parsing error: ...`)
+- **Undefined variable**: ``Template error: error: Field `missing_var` is not defined. Available fields: ...`` (Tera 2 points at the exact line and column)
 - **Invalid template**: `Template file does not exist: /path/to/template.txt`
 - **Unsupported format**: `Unsupported input format for file '...' Supported formats: json, yaml, toml`
 - **Invalid env-vars input**: `Cannot include environment variables: data source must be a JSON object when --env-vars is used.`
 - **Stdin without format**: `When reading from stdin, --format must be specified (json, yaml, or toml)`
-- **Output format validation**: `Rendered output is not valid JSON/YAML/TOML`
-- **Strict mode**: `Variable 'undefined_var' not found in strict mode`
+- **Output format validation**: `Output is not valid JSON: ...` (or YAML / TOML)
+- **Unknown filter or function**: ``Template error: error: Unknown filter `date` `` (caught before rendering)
+- **Diff without destination**: `--dest is required when using --diff`
+- **Directory mode without destination**: `--dest is required when using directory mode`
 
 ## Advanced Usage Patterns
 
@@ -291,7 +304,7 @@ teraclio -s defaults.yaml -s app.yaml -s secrets.yaml -t k8s-deployment.yaml
 ```bash
 # In CI/CD pipelines
 curl -s $API_ENDPOINT | jq '.' > data.json
-teraclio -s data.json -t report.html --env-vars > report.html
+teraclio -s data.json -t report.html.tera --env-vars > report.html
 
 # Docker builds
 teraclio -s build-config.yaml -t Dockerfile.template > Dockerfile
@@ -300,7 +313,7 @@ teraclio -s build-config.yaml -t Dockerfile.template > Dockerfile
 teraclio -s config.yaml -t deployment.yaml --check
 
 # Preview changes before applying
-teraclio -s config.yaml -t deployment.yaml -d deployment.yaml --diff
+teraclio -s config.yaml -t deployment.yaml.tera -d deployment.yaml --diff
 ```
 
 ### Environment-Specific Templating
