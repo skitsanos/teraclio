@@ -51,17 +51,19 @@ security:
 
 **Template** (`kubernetes-deployment.yaml.template`):
 ```jinja2
+{% set env_name = data.env.ENVIRONMENT | default(value="development") %}
+{% set cfg = data.environments[env_name] %}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ data.application.name | kebab_case }}-{{ data.env.ENVIRONMENT | default(value="dev") }}
-  namespace: {{ data.env.ENVIRONMENT | default(value="dev") }}
+  name: {{ data.application.name | kebab_case }}-{{ env_name }}
+  namespace: {{ env_name }}
   labels:
     app: {{ data.application.name | kebab_case }}
     version: {{ data.application.version }}
-    environment: {{ data.env.ENVIRONMENT | default(value="dev") }}
+    environment: {{ env_name }}
 spec:
-  replicas: {{ data.environments[data.env.ENVIRONMENT | default(value="development")].replicas }}
+  replicas: {{ cfg.replicas }}
   selector:
     matchLabels:
       app: {{ data.application.name | kebab_case }}
@@ -76,19 +78,19 @@ spec:
         image: {{ data.application.repository }}:{{ data.application.version }}
         resources:
           limits:
-            cpu: {{ data.environments[data.env.ENVIRONMENT | default(value="development")].cpu_limit }}
-            memory: {{ data.environments[data.env.ENVIRONMENT | default(value="development")].memory_limit }}
+            cpu: {{ cfg.cpu_limit }}
+            memory: {{ cfg.memory_limit }}
         env:
         - name: DATABASE_URL
-          value: "{{ data.environments[data.env.ENVIRONMENT | default(value="development")].database_url }}"
+          value: "{{ cfg.database_url }}"
         - name: DEBUG_ENABLED
-          value: "{{ data.environments[data.env.ENVIRONMENT | default(value="development")].debug_enabled }}"
+          value: "{{ cfg.debug_enabled }}"
         - name: LOG_LEVEL
-          value: "{{ data.environments[data.env.ENVIRONMENT | default(value="development")].log_level | upper }}"
+          value: "{{ cfg.log_level | upper }}"
         - name: APP_VERSION
           value: "{{ data.application.version }}"
         - name: DEPLOYMENT_HASH
-          value: "{{ (data.application.name + data.application.version + data.env.ENVIRONMENT | default(value="dev")) | sha256 }}"
+          value: "{{ (data.application.name ~ data.application.version ~ env_name) | sha256 }}"
         {% for secret in data.security.secrets %}
         - name: {{ secret | snake_case | upper }}
           valueFrom:
@@ -101,7 +103,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ data.application.name | kebab_case }}-service
-  namespace: {{ data.env.ENVIRONMENT | default(value="dev") }}
+  namespace: {{ env_name }}
 spec:
   selector:
     app: {{ data.application.name | kebab_case }}
@@ -195,8 +197,8 @@ Transform security scan results into professional reports with risk assessments,
 ```jinja2
 # Security Compliance Report: {{ data.scan_metadata.project }}
 
-**Generated**: {{ data.scan_metadata.scan_date | date(format="%B %d, %Y at %H:%M UTC") }}  
-**Report ID**: {{ (data.scan_metadata.project + data.scan_metadata.scan_date) | sha256 | truncate(length=12) }}  
+**Generated**: {{ data.scan_metadata.scan_date | date_format(format="%B %d, %Y at %H:%M UTC") }}  
+**Report ID**: {{ (data.scan_metadata.project ~ data.scan_metadata.scan_date) | sha256 | truncate(length=12, end="") }}  
 **Compliance Frameworks**: {{ data.compliance_frameworks | join(sep=", ") }}
 
 ---
@@ -231,7 +233,7 @@ This security assessment identified **{{ data.summary.total }}** vulnerabilities
 
 **Remediation**: {{ vuln.remediation }}
 
-**Risk Hash**: `{{ (vuln.id + vuln.file + vuln.line|string) | md5 }}`
+**Risk Hash**: `{{ (vuln.id ~ vuln.file ~ vuln.line) | md5 }}`
 
 ---
 {% endfor %}
@@ -371,7 +373,7 @@ provider "aws" {
       Owner       = "{{ data.project.owner | kebab_case }}"
       ManagedBy   = "terraform"
       CreatedBy   = "teraclio"
-      ConfigHash  = "{{ (data.project.name + data.project.environment) | sha256 | truncate(length=16) }}"
+      ConfigHash  = "{{ (data.project.name ~ data.project.environment) | sha256 | truncate(length=16, end="") }}"
     }
   }
 }
@@ -397,7 +399,7 @@ resource "aws_internet_gateway" "main" {
 }
 
 # Public Subnets
-{% for i in range(data.network.public_subnets | length) %}
+{% for i in range(end=data.network.public_subnets | length) %}
 resource "aws_subnet" "public_{{ loop.index }}" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "{{ data.network.public_subnets[i] }}"
@@ -412,7 +414,7 @@ resource "aws_subnet" "public_{{ loop.index }}" {
 {% endfor %}
 
 # Private Subnets
-{% for i in range(data.network.private_subnets | length) %}
+{% for i in range(end=data.network.private_subnets | length) %}
 resource "aws_subnet" "private_{{ loop.index }}" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "{{ data.network.private_subnets[i] }}"
@@ -438,7 +440,7 @@ resource "aws_security_group" "application" {
     from_port   = {{ app.port }}
     to_port     = {{ app.port }}
     protocol    = "tcp"
-    cidr_blocks = {{ data.security.allowed_cidr_blocks | tojson }}
+    cidr_blocks = {{ data.security.allowed_cidr_blocks | json_encode }}
   }
   {% endfor %}
 
@@ -487,7 +489,7 @@ resource "aws_db_instance" "main" {
 # Auto Scaling Group
 resource "aws_autoscaling_group" "main" {
   name                = "{{ data.project.name | kebab_case }}-asg"
-  vpc_zone_identifier = [{% for i in range(data.network.private_subnets | length) %}aws_subnet.private_{{ loop.index }}.id{% if not loop.last %}, {% endif %}{% endfor %}]
+  vpc_zone_identifier = [{% for i in range(end=data.network.private_subnets | length) %}aws_subnet.private_{{ loop.index }}.id{% if not loop.last %}, {% endif %}{% endfor %}]
   
   min_size         = {{ data.compute.min_instances }}
   max_size         = {{ data.compute.max_instances }}
@@ -519,7 +521,7 @@ output "database_endpoint" {
 
 output "infrastructure_hash" {
   description = "Hash of the infrastructure configuration"
-  value       = "{{ data | tojson | sha256 }}"
+  value       = "{{ data | json_encode | sha256 }}"
 }
 ```
 
@@ -629,13 +631,13 @@ Transform OpenAPI specifications into tailored documentation for different stake
 ```
 
 **Template** (`api-docs-developer.md`):
-```jinja2
+````jinja2
 # {{ data.api.name }} - Developer Documentation
 
 **Version**: {{ data.api.version }}  
 **Base URL**: `{{ data.api.base_url }}`  
 **Authentication**: {{ data.api.authentication }}  
-**Documentation Hash**: {{ data.api.name | sha256 | truncate(length=12) }}
+**Documentation Hash**: {{ data.api.name | sha256 | truncate(length=12, end="") }}
 
 {{ data.api.description }}
 
@@ -678,7 +680,7 @@ curl -H "Authorization: Bearer {{ data.env.SAMPLE_TOKEN | default(value="your-to
 
 #### Response Codes
 
-{% for code, description in endpoint.responses.items() %}
+{% for code, description in endpoint.responses %}
 - **{{ code }}**: {{ description }}
 {% endfor %}
 
@@ -687,7 +689,7 @@ curl -H "Authorization: Bearer {{ data.env.SAMPLE_TOKEN | default(value="your-to
 
 ```json
 {
-{% for field, type in endpoint.request_body.items() %}
+{% for field, type in endpoint.request_body %}
   "{{ field }}": "{{ type }}"{% if not loop.last %},{% endif %}
 {% endfor %}
 }
@@ -698,7 +700,7 @@ curl -H "Authorization: Bearer {{ data.env.SAMPLE_TOKEN | default(value="your-to
 #### Example Response
 
 ```json
-{{ endpoint.example_response | tojson(indent=2) }}
+{{ endpoint.example_response | json_encode }}
 ```
 {% endif %}
 
@@ -713,13 +715,13 @@ curl -X {{ endpoint.method }} \
 curl -X {{ endpoint.method }} \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{{ endpoint.request_body | tojson }}' \
+  -d '{{ endpoint.request_body | json_encode }}' \
   "{{ data.api.base_url }}{{ endpoint.path }}"
 {% endif %}
 ```
 
 #### Endpoint Hash
-`{{ (endpoint.method + endpoint.path) | md5 }}`
+`{{ (endpoint.method ~ endpoint.path) | md5 }}`
 
 ---
 {% endfor %}
@@ -804,7 +806,7 @@ def get_customers(page=1, limit=10):
 **Generated**: {{ data.env.BUILD_DATE | default(value="Unknown") }}  
 **Environment**: {{ data.env.ENVIRONMENT | default(value="development") | upper }}  
 **Contact**: {{ data.env.API_CONTACT | default(value="api-team@company.com") }}
-```
+````
 
 **Usage**:
 ```bash
@@ -966,7 +968,7 @@ dashboards:
           }
         ]
       }
-      {% for dept_name, dept_data in data.departments.items() %},
+      {% for dept_name, dept_data in data.departments %},
       {
         "id": {{ loop.index + 1 }},
         "title": "{{ dept_data.name }} - Performance Dashboard",
@@ -1003,11 +1005,11 @@ dashboards:
           "tooltip": {"mode": "single"}
         },
         "targets": [
-          {% for target_name, target_value in dept_data.targets.items() %}
+          {% for target_name, target_value in dept_data.targets %}
           {
             "expr": "{{ dept_name | snake_case }}_{{ target_name | snake_case }}",
-            "legendFormat": "{{ target_name | title | replace('_', ' ') }} (Target: {{ target_value }})",
-            "refId": "{{ loop.index0 | string | upper }}"
+            "legendFormat": "{{ target_name | replace(from="_", to=" ") | title }} (Target: {{ target_value }})",
+            "refId": "{{ loop.index0 | str }}"
           }{% if not loop.last %},{% endif %}
           {% endfor %}
         ],
@@ -1015,7 +1017,7 @@ dashboards:
           "alertRuleTags": {
             "department": "{{ dept_name }}",
             "manager": "{{ dept_data.manager | url_encode }}",
-            "budget_hash": "{{ dept_data.budget | string | md5 }}"
+            "budget_hash": "{{ dept_data.budget | str | md5 }}"
           },
           "conditions": [
             {
@@ -1036,7 +1038,7 @@ dashboards:
         }
       }
       {% endfor %}
-      {% for metric_name, metric_data in data.metrics.items() %},
+      {% for metric_name, metric_data in data.metrics %},
       {
         "id": {{ loop.index + 10 }},
         "title": "{{ metric_data.name }}",
@@ -1052,8 +1054,8 @@ dashboards:
               "mode": "absolute",
               "steps": [
                 {"color": "red", "value": null},
-                {"color": "yellow", "value": {{ metric_data.get('target_value', 0) * 0.8 }}},
-                {"color": "green", "value": {{ metric_data.get('target_value', 0) * 0.95 }}}
+                {"color": "yellow", "value": {{ (metric_data.target_value | default(value=0)) * 0.8 }}},
+                {"color": "green", "value": {{ (metric_data.target_value | default(value=0)) * 0.95 }}}
               ]
             },
             "unit": "{% if 'revenue' in metric_name %}{{ data.organization.currency | lower }}{% elif 'rate' in metric_name or 'score' in metric_name %}percent{% else %}short{% endif %}"
@@ -1100,7 +1102,7 @@ dashboards:
             }
           }
         ],
-        "description": "{{ metric_data.get('formula', 'Custom business metric') }}\n\nMeasurement: {{ metric_data.get('measurement_frequency', 'daily') | title }}\nTarget: {{ metric_data.get('target_value', 'Variable') }}\nTrend: {{ metric_data.get('trend', 'stable') | title }}\n\nMetric Hash: {{ (metric_name + metric_data.name) | sha256 | truncate(length=12) }}"
+        "description": "{{ metric_data.formula | default(value="Custom business metric") }}\n\nMeasurement: {{ metric_data.measurement_frequency | default(value="daily") | title }}\nTarget: {{ metric_data.target_value | default(value="Variable") }}\nTrend: {{ metric_data.trend | default(value="stable") | title }}\n\nMetric Hash: {{ (metric_name ~ metric_data.name) | sha256 | truncate(length=12, end="") }}"
       }
       {% endfor %}
     ],
@@ -1117,7 +1119,7 @@ dashboards:
           "multi": true,
           "name": "department",
           "options": [
-            {% for dept_name in data.departments.keys() %}
+            {% for dept_name in data.departments | keys %}
             {"text": "{{ data.departments[dept_name].name }}", "value": "{{ dept_name }}"}{% if not loop.last %},{% endif %}
             {% endfor %}
           ],

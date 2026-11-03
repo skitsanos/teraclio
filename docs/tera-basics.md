@@ -1,6 +1,6 @@
 # Tera Template Basics
 
-Teraclio uses the [Tera](https://keats.github.io/tera/) template engine, which is inspired by Jinja2 and Django templates. This guide covers the essential syntax and features.
+Teraclio uses [Tera](https://keats.github.io/tera/) 2, a template engine inspired by Jinja2 and Django templates. This guide covers the essential syntax and features. Tera 2 is stricter than Tera 1 and Jinja2. If you are porting old templates, read [Coming from Jinja2 or Tera 1](#coming-from-jinja2-or-tera-1) first.
 
 ## Template Syntax
 
@@ -22,8 +22,9 @@ User ID: {{ data.user.id }}
 ```jinja2
 {{ product.name }}
 {{ user.profile.email }}
-{{ items.0 }}  {# First item in array #}
 ```
+
+Array elements need square brackets: `{{ items[0] }}`. The Tera 1 form `{{ items.0 }}` is a syntax error in Tera 2.
 
 ### Square Bracket Notation
 ```jinja2
@@ -63,7 +64,7 @@ User ID: {{ data.user.id }}
 {{ 5 + 3 }}        {# Addition: 8 #}
 {{ 10 - 4 }}       {# Subtraction: 6 #}
 {{ 6 * 7 }}        {# Multiplication: 42 #}
-{{ 15 / 3 }}       {# Division: 5 #}
+{{ 15 / 3 }}       {# Division always returns a float: 5.0 #}
 {{ 17 % 5 }}       {# Modulo: 2 #}
 ```
 
@@ -80,6 +81,8 @@ User ID: {{ data.user.id }}
 {{ "Hello " ~ name ~ "!" }}
 {{ first_name ~ " " ~ last_name }}
 ```
+
+Use `~`. The `+` operator only works on numbers: `"a" + "b"` is a render error.
 
 ## Control Flow
 
@@ -149,6 +152,9 @@ You have {{ items_count }} items.
 ```
 
 ### Global Variables (in loops)
+
+A plain `{% set %}` inside a `for` loop is scoped to that loop iteration, so accumulators need `set_global`:
+
 ```jinja2
 {% set_global total = 0 %}
 {% for item in data.items %}
@@ -165,52 +171,76 @@ Filters transform variables and are chained with the `|` operator:
 {{ name | upper }}
 {{ content | truncate(length=100) }}
 {{ items | length }}
-{{ date_string | date(format="%Y-%m-%d") }}
+{{ date_string | date_format(format="%Y-%m-%d") }}  {# Teraclio filter #}
 
 {# Chain multiple filters #}
-{{ data.description | striptags | truncate(length=50) | title }}
+{{ data.description | trim | truncate(length=50) | title }}
 ```
 
-### Common Built-in Filters
+Filter arguments are always named (`truncate(length=50)`), never positional (`truncate(50)`).
+
+### Built-in Filters
+
+These are the complete set of filters Tera 2 ships with. Teraclio adds 24 more (see [Custom Filters](custom-filters.md)).
+
 ```jinja2
-{# String filters #}
-{{ text | upper }}
-{{ text | lower }}
-{{ text | title }}
-{{ text | capitalize }}
-{{ html_content | striptags }}
+{# Strings #}
+{{ text | upper }}  {{ text | lower }}  {{ text | title }}  {{ text | capitalize }}
+{{ text | trim }}  {{ text | trim_start(pat="x") }}  {{ text | trim_end }}
+{{ text | replace(from="_", to=" ") }}
+{{ text | truncate(length=20) }}           {# appends "…"; use end="" to disable #}
+{{ text | split(pat=",") }}
+{{ text | wordcount }}
+{{ text | indent(width=4) }}
+{{ text | newlines_to_br }}
+{{ count | pluralize(singular="", plural="s") }}
 
-{# Array filters #}
-{{ items | length }}
-{{ items | first }}
-{{ items | last }}
-{{ items | reverse }}
-{{ items | sort }}
+{# Escaping and safety #}
+{{ text | escape }}  {{ text | escape_html }}  {{ text | escape_xml }}
+{{ markup | safe }}
+
+{# Arrays and maps #}
+{{ items | length }}  {{ items | first }}  {{ items | last }}  {{ items | nth(n=2) }}
+{{ items | reverse }}  {{ items | unique }}
+{{ items | sort }}  {{ people | sort(attribute="age") }}
 {{ names | join(sep=", ") }}
+{{ people | group_by(attribute="team") }}
+{{ config | keys }}  {{ config | values }}  {{ config | pairs }}
+{{ config | get(key="port", default=8080) }}
 
-{# Number filters #}
-{{ price | round }}
-{{ size | filesizeformat }}
+{# Numbers and conversion #}
+{{ price | round }}  {{ price | round(method="floor", precision=2) }}  {{ delta | abs }}
+{{ "42" | int }}  {{ "3.14" | float }}  {{ 42 | str }}
+
+{# Fallbacks #}
+{{ data.optional | default(value="N/A") }}
 ```
+
+Tera 1 / Jinja2 filters that **do not exist** in Tera 2 include `date`, `striptags`, `filesizeformat`, `map`, `sum`, `filter`, `slice`, `concat`, `string`, `tojson`, and `urlencode`. Teraclio covers several of these: `date_format`, `json_encode`, and `url_encode`.
 
 ## Functions
 
 ### Built-in Functions
+
+Tera 2 has only two built-in functions:
+
 ```jinja2
-{# Range function #}
+{# range(end=N), optionally with start= and step_by= #}
 {% for i in range(end=5) %}
   Number: {{ i }}
 {% endfor %}
 
-{# Current time #}
-Generated: {{ now() | date(format="%Y-%m-%d %H:%M") }}
-
-{# Environment variables #}
-Project: {{ get_env(name="PROJECT_NAME", default="Unknown") }}
-
-{# Random numbers #}
-Random: {{ get_random(start=1, end=100) }}
+{# throw(message=...) aborts rendering with an error #}
+{% if not data.version %}{{ throw(message="data.version is required") }}{% endif %}
 ```
+
+Tera 1's `now()`, `get_env()`, and `get_random()` are gone. Use these Teraclio equivalents instead:
+
+| Need | Teraclio approach |
+|------|-------------------|
+| Current time | `--set generated_at="$(date -u +%FT%TZ)"` then `{{ data.generated_at }}`, or format a timestamp from your data with `date_format` |
+| Environment variable | `--env-vars` then `{{ data.env.PROJECT_NAME \| default(value="Unknown") }}` |
+| Random identifier | `{{ "" \| uuid }}` |
 
 ## Comments and Raw Content
 
@@ -253,6 +283,8 @@ Control whitespace around template tags:
 
 ## Template Inheritance
 
+Teraclio registers every file in the template's directory under its bare file name. That means `{% extends "base.html" %}` and `{% include "header.html" %}` work when those files sit next to the template being rendered.
+
 ### Base Template (`base.html`)
 ```jinja2
 <!DOCTYPE html>
@@ -279,6 +311,34 @@ Control whitespace around template tags:
 <p>This content replaces the block in the base template.</p>
 {% endblock %}
 ```
+
+## Autoescaping
+
+Templates whose file name ends in `.html`, `.htm`, or `.xml` are auto-escaped: every `{{ ... }}` output has `&`, `<`, `>`, `"`, and `'` escaped. Other templates (`.txt`, `.md`, `.yaml`, `.tera`, ...) are not.
+
+```jinja2
+{# page.html: data.bio = "<b>Hi</b>" #}
+{{ data.bio }}          {# &lt;b&gt;Hi&lt;/b&gt; #}
+{{ data.bio | safe }}   {# <b>Hi</b>: only for trusted content #}
+```
+
+In auto-escaped templates, do not also apply Teraclio's `html_escape` or `xml_escape`, or the output is escaped twice (`&amp;lt;`).
+
+## Coming from Jinja2 or Tera 1
+
+| Jinja2 / Tera 1 | Tera 2 |
+|-----------------|--------|
+| `{{ "a" + "b" }}` | `{{ "a" ~ "b" }}` |
+| `{{ items.0 }}` | `{{ items[0] }}` |
+| `{{ list \| join(", ") }}` | `{{ list \| join(sep=", ") }}` (named arguments only) |
+| `{{ "=" * 20 }}` | `{% for i in range(end=20) %}={% endfor %}` |
+| `{% for k, v in obj.items() %}` | `{% for k, v in obj %}` (no method calls) |
+| `{{ x \| string }}` | `{{ x \| str }}` |
+| `{{ x \| tojson }}` | `{{ x \| json_encode }}` (Teraclio filter) |
+| `{{ list \| map(attribute="p") \| sum }}` | accumulate with `set_global` in a loop |
+| `{{ now() \| date(...) }}` | `--set` a timestamp, or `date_format` on data |
+| `{{ flag \| lower }}` on a boolean | `{{ flag }}` (filters such as `lower` need strings) |
+| `{% macro %}` / `{% import %}` | not supported; use `{% include %}` |
 
 ## Best Practices
 

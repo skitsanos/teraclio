@@ -23,7 +23,7 @@ teraclio --source data.json --template template.txt
 - 📝 **Powerful Templating** - Full Tera template engine support
 - 🔧 **Extensive Filter Library** - 24 custom filters for data transformation
 - 📊 **Multi-Format Input** - JSON, YAML, TOML with auto-detection
-- 🌍 **Cross-Platform** - Linux, macOS, Windows (Intel & ARM)
+- 🌍 **Cross-Platform** - Linux (glibc & musl), macOS (Intel & Apple Silicon), Windows
 - ⚡ **Flexible output** - File output or stdout, with input format detection
 - 🔒 **Security Filters** - Hash generation (MD5, SHA1, SHA256)
 - 🌐 **Web-Ready** - URL encoding, HTML/XML escaping
@@ -33,15 +33,16 @@ teraclio --source data.json --template template.txt
 - 📂 **Multiple Data Sources** - Merge multiple JSON/YAML/TOML files
 - 👀 **Watch Mode** - Auto re-render on file changes
 - 📁 **Directory Mode** - Batch process template folders
-- 🐚 **Shell Completions** - bash, zsh, fish, powershell
+- 🐚 **Shell Completions** - bash, zsh, fish, elvish, powershell
 
 ## Documentation
 
 - **[Installation Guide](docs/installation.md)** - Download binaries or build from source
 - **[Usage Guide](docs/usage.md)** - Command-line interface and examples
-- **[Custom Filters](docs/custom-filters.md)** - Base64 and bytes conversion filters
-- **[Tera Template Basics](docs/tera-basics.md)** - Template syntax and features
+- **[Custom Filters](docs/custom-filters.md)** - All 24 Teraclio filters with examples
+- **[Tera Template Basics](docs/tera-basics.md)** - Tera 2 template syntax, built-ins, and gotchas
 - **[Examples](docs/examples.md)** - Real-world usage scenarios
+- **[Use Cases](docs/use-cases.md)** - End-to-end CI/CD, IaC, reporting, and docs generation
 
 ## Basic Usage
 
@@ -57,10 +58,10 @@ teraclio --source <data-file> --template <template-file> [OPTIONS]
 | `--format, -f` | ❌ | Input format (auto-detected; required for stdin) |
 | `--env-vars` | ❌ | Include environment variables as `data.env` |
 | `--set KEY=VALUE` | ❌ | Set template variables from CLI (repeatable) |
-| `--check` | ❌ | Render-check templates without writing output |
+| `--check` | ❌ | Render the template to validate it, without writing output |
 | `--diff` | ❌ | Show diff vs destination file instead of writing |
 | `--watch, -w` | ❌ | Watch files and re-render on changes |
-| `--strict` | ❌ | Compatibility flag; undefined template variables already fail by default |
+| `--strict` | ❌ | Deprecated no-op, kept for backward compatibility (undefined variables always fail) |
 | `--output-format` | ❌ | Validate output is well-formed (json, yaml, toml) |
 | `--recursive, -r` | ❌ | Process template directories recursively |
 | `--quiet, -q` | ❌ | Suppress informational messages |
@@ -68,10 +69,14 @@ teraclio --source <data-file> --template <template-file> [OPTIONS]
 | `--completions` | ❌ | Generate shell completions (bash, zsh, fish, elvish, powershell) |
 
 Notes:
-- Files without a known extension are treated as JSON.
-- `--source -` reads JSON/YAML/TOML data from stdin; `--format` is required in this mode.
-- `--env-vars` requires the input data root to be an object; non-object inputs now return a clear validation error.
-- Multiple `--source` flags merge data objects, with later sources overriding earlier ones.
+- Everything is exposed to templates under the `data` root: `{{ data.name }}`, `{{ data.env.HOME }}`, and `--set` values as `{{ data.KEY }}`.
+- Format is detected from the extension (`.json`, `.yaml`/`.yml`, `.toml`). A file with **no** extension is parsed as JSON; any other extension needs `--format`.
+- `--format` applies to every `--source`, not just stdin.
+- `--source -` reads JSON/YAML/TOML data from stdin; `--format` is required in this mode, and `-` must be the last source.
+- Multiple `--source` flags are deep-merged, with later sources overriding earlier ones.
+- `--set` values are always strings and override top-level keys after merging.
+- `--env-vars` and `--set` require the merged data root to be an object.
+- Templates ending in `.html`, `.htm`, or `.xml` are auto-escaped by Tera; use `| safe` to emit raw markup.
 
 ## Quick Examples
 
@@ -97,7 +102,7 @@ teraclio -s data.json -t templates/ -d output/ -r
 
 ### Template Includes
 ```html
-{# In your template, include reusable partials #}
+{# Partials must live in the same directory as the template #}
 {% include "header.html" %}
 <main>{{ data.content }}</main>
 {% include "footer.html" %}

@@ -49,7 +49,7 @@ You are a Developer on the Backend team.
 **Template** (`inventory-report.txt`):
 ```jinja2
 {{ data.store }} Inventory Report
-{{ "=" * (data.store | length + 17) }}
+{% for i in range(end=data.store | length + 17) %}={% endfor %}
 
 {% for item in data.items %}
 {{ loop.index }}. {{ item.name }}
@@ -58,9 +58,13 @@ You are a Developer on the Backend team.
    Value: ${{ (item.price * item.stock) | round(precision=2) }}
 
 {% endfor %}
+{% set_global total_value = 0 %}
+{% for item in data.items %}{% set_global total_value = total_value + item.price * item.stock %}{% endfor %}
 Total Items: {{ data.items | length }}
-Total Value: ${{ data.items | map(attribute="price") | sum | round(precision=2) }}
+Total Value: ${{ total_value | round(precision=2) }}
 ```
+
+Tera 2 has no `map`/`sum` filters, so the total is accumulated with `set_global` (a plain `set` inside a loop does not survive the iteration).
 
 ## Advanced Examples
 
@@ -90,7 +94,7 @@ Total Value: ${{ data.items | map(attribute="price") | sum | round(precision=2) 
 **Template** (`app.conf`):
 ```jinja2
 # {{ data.app.name }} Configuration
-# Generated on {{ now() | date(format="%Y-%m-%d %H:%M:%S") }}
+# Generated on {{ data.generated_at }}
 
 [application]
 name = {{ data.app.name }}
@@ -104,12 +108,18 @@ database = {{ data.database.name }}
 
 [features]
 {% for feature, enabled in data.features %}
-{{ feature }} = {{ enabled | lower }}
+{{ feature }} = {{ enabled }}
 {% endfor %}
 
 # Environment-specific settings (use --env-vars flag)
 debug = {{ data.env.DEBUG | default(value="false") }}
 log_level = {{ data.env.LOG_LEVEL | default(value="info") }}
+```
+
+**Command**:
+```bash
+teraclio -s config-data.json -t app.conf --env-vars \
+  --set generated_at="$(date -u +'%Y-%m-%d %H:%M:%S')"
 ```
 
 ### HTML Report Generation
@@ -158,14 +168,14 @@ log_level = {{ data.env.LOG_LEVEL | default(value="info") }}
 </head>
 <body>
     <h1>{{ data.project }} Test Report</h1>
-    <p><strong>Generated:</strong> {{ data.timestamp | date(format="%B %d, %Y at %H:%M") }}</p>
+    <p><strong>Generated:</strong> {{ data.timestamp | date_format(format="%B %d, %Y at %H:%M") }}</p>
     
     <div class="summary">
         <h2>Summary</h2>
         <p><strong>Total Tests:</strong> {{ data.summary.total }}</p>
         <p class="passed"><strong>Passed:</strong> {{ data.summary.passed }}</p>
         <p class="failed"><strong>Failed:</strong> {{ data.summary.failed }}</p>
-        <p><strong>Success Rate:</strong> {{ ((data.summary.passed / data.summary.total) * 100) | round }}%</p>
+        <p><strong>Success Rate:</strong> {{ ((data.summary.passed / data.summary.total) * 100) | round | int }}%</p>
     </div>
 
     {% if data.failures %}
@@ -252,7 +262,8 @@ API Key (Base64): {{ user.api_key | base64_encode }}
     </ul>
     
     <h2>User Content (Escaped)</h2>
-    <p>{{ data.user_content | html_escape }}</p>
+    {# .html templates are auto-escaped; html_escape here would double-escape #}
+    <p>{{ data.user_content }}</p>
     
     <h2>API Endpoints</h2>
     {% for endpoint in data.api_endpoints %}
@@ -468,7 +479,7 @@ services:
     port: 8002
 ```
 
-**Template** (`docker-compose.yml`):
+**Template** (`docker-compose.yml.tera`):
 ```jinja2
 version: '3.8'
 services:
@@ -490,7 +501,7 @@ services:
 
 **Command**:
 ```bash
-teraclio -s app-config.yaml -t docker-compose.yml --env-vars
+API_KEY=changeme teraclio -s app-config.yaml -t docker-compose.yml.tera --env-vars -d docker-compose.yml
 ```
 
 ### TOML Configuration Example
@@ -588,7 +599,7 @@ Environment: {{ data.env.ENVIRONMENT | default(value="development") | upper }}
 ## Security Tokens
 
 Project Hash: `{{ data.project | sha256 }}`  
-Session Token: `{{ (data.project + ":" + data.env.BUILD_ID | default(value="dev")) | base64_encode }}`
+Session Token: `{{ (data.project ~ ":" ~ data.env.BUILD_ID | default(value="dev")) | base64_encode }}`
 ```
 
 **Command**:
