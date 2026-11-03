@@ -234,11 +234,11 @@ Tera 2 has only two built-in functions:
 {% if not data.version %}{{ throw(message="data.version is required") }}{% endif %}
 ```
 
-Tera 1's `now()`, `get_env()`, and `get_random()` are gone. Use these Teraclio equivalents instead:
+Tera 1's `now()`, `get_env()`, and `get_random()` are gone from Tera itself. Teraclio provides these replacements:
 
 | Need | Teraclio approach |
 |------|-------------------|
-| Current time | `--set generated_at="$(date -u +%FT%TZ)"` then `{{ data.generated_at }}`, or format a timestamp from your data with `date_format` |
+| Current time | `{{ now() }}` (local, RFC 3339), `{{ now(utc=true) }}`, or `{{ now(timestamp=true) }}` (Unix seconds); format with `{{ now() \| date_format(format="%Y-%m-%d") }}` |
 | Environment variable | `--env-vars` then `{{ data.env.PROJECT_NAME \| default(value="Unknown") }}` |
 | Random identifier | `{{ "" \| uuid }}` |
 
@@ -314,7 +314,7 @@ Teraclio registers every file in the template's directory under its bare file na
 
 ## Autoescaping
 
-Templates whose file name ends in `.html`, `.htm`, or `.xml` are auto-escaped: every `{{ ... }}` output has `&`, `<`, `>`, `"`, and `'` escaped. Other templates (`.txt`, `.md`, `.yaml`, `.tera`, ...) are not.
+Templates whose file name ends in `.html`, `.htm`, or `.xml` are auto-escaped: every `{{ ... }}` output has `&`, `<`, `>`, `"`, and `'` escaped. The same applies when one of those is followed by a template suffix (`page.html.tera`, `feed.xml.j2`). Other templates (`.txt`, `.md`, `.yaml`, `notes.tera`, ...) are not.
 
 ```jinja2
 {# page.html: data.bio = "<b>Hi</b>" #}
@@ -336,7 +336,7 @@ In auto-escaped templates, do not also apply Teraclio's `html_escape` or `xml_es
 | `{{ x \| string }}` | `{{ x \| str }}` |
 | `{{ x \| tojson }}` | `{{ x \| json_encode }}` (Teraclio filter) |
 | `{{ list \| map(attribute="p") \| sum }}` | accumulate with `set_global` in a loop |
-| `{{ now() \| date(...) }}` | `--set` a timestamp, or `date_format` on data |
+| `{{ now() \| date(format=...) }}` | `{{ now() \| date_format(format=...) }}` (Teraclio function and filter) |
 | `{{ flag \| lower }}` on a boolean | `{{ flag }}` (filters such as `lower` need strings) |
 | `{% macro %}` / `{% import %}` | not supported; use `{% include %}` |
 

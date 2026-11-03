@@ -30,6 +30,7 @@ Welcome to the Teraclio documentation! This directory contains comprehensive gui
 - Text: `truncate_words(count=...)`, `regex_replace(pattern=..., replacement=...)`
 - Case: `snake_case`, `kebab_case`, `camel_case`, `pascal_case`, `slug`
 - Other: `date_format(format=...)`, `uuid`, `bytes_to_str`, `str_to_bytes`
+- Function: `now()`, `now(utc=true)`, `now(timestamp=true)`
 
 Run `teraclio --list-filters` for the same list from the binary.
 

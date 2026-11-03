@@ -42,11 +42,11 @@ Input: {{ data.content }}
 Encoded: {{ data.content | base64_encode }}
 ```
 
-#### `base64_decode` 
+#### `base64_decode`
 ```jinja2
-Decoded: {{ data.encoded | base64_decode | bytes_to_str }}
+Decoded: {{ data.encoded | base64_decode }}
 ```
-**Note**: Returns bytes, use `bytes_to_str` for text display.
+Returns the decoded text. A payload that is not valid UTF-8 (binary data) comes back as a byte array instead. `bytes_to_str` accepts either form, so existing `base64_decode | bytes_to_str` chains still work.
 
 ## Web & URL Filters
 
@@ -180,13 +180,24 @@ Low-level data type conversions for advanced use cases.
 ```jinja2
 String: {{ data.byte_array | bytes_to_str }}
 ```
-Converts byte array `[72, 101, 108, 108, 111]` to `"Hello"`
+Converts byte array `[72, 101, 108, 108, 111]` to `"Hello"`. Invalid UTF-8 sequences become `�`. A string input is returned unchanged.
 
 ### `str_to_bytes`
 ```jinja2
 Bytes: {{ data.text | str_to_bytes }}
 ```
 Converts `"Hi"` to `[72, 105]`
+
+## Functions
+
+### `now`
+```jinja2
+Generated: {{ now() }}                                    {# 2026-11-02T20:18:51+01:00 #}
+Generated: {{ now(utc=true) }}                            {# 2026-11-02T19:18:51Z #}
+Epoch: {{ now(timestamp=true) }}                          {# 1793650731 #}
+Date: {{ now() | date_format(format="%B %d, %Y") }}       {# November 02, 2026 #}
+```
+Returns the current time as an RFC 3339 string (local time unless `utc=true`), or Unix seconds with `timestamp=true`. Tera 2 removed its own `now()`; this restores it in a form `date_format` parses directly.
 
 ## Real-World Examples
 
