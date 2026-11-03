@@ -13,9 +13,10 @@ use crate::filters::text::filter_truncate_words;
 use crate::filters::url::{filter_url_decode, filter_url_encode};
 use crate::filters::uuid::filter_uuid;
 use serde_json::Value as JsonValue;
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tera::{Context, Kwargs, State, Tera, Value};
 
 type LegacyFilter = fn(
@@ -44,12 +45,18 @@ pub struct TemplateEngine {
     tera: Tera,
 }
 
+impl Default for TemplateEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TemplateEngine {
     /**
      * Create a new TemplateEngine instance with registered filters
      * @author: skitsanos
      */
-    pub fn new(_strict: bool) -> Self {
+    pub fn new() -> Self {
         let mut tera = Tera::default();
 
         // Base64 filters
@@ -102,11 +109,18 @@ impl TemplateEngine {
     }
 
     /**
-     * Load a template file into the engine, registering sibling files
-     * in the same directory so that {% include "sibling.html" %} works.
+     * Load a template file into the engine, registering sibling files in the
+     * same directory under their bare file names so that
+     * {% include "sibling.html" %} and {% extends "base.html" %} resolve.
+     * Paths listed in `exclude` (data sources, the output file) are never
+     * parsed as templates.
      * @author: skitsanos
      */
-    pub fn load_template<P: AsRef<Path>>(&mut self, template_path: P) -> Result<()> {
+    pub fn load_template<P: AsRef<Path>>(
+        &mut self,
+        template_path: P,
+        exclude: &[PathBuf],
+    ) -> Result<()> {
         let path = template_path.as_ref();
 
         if !path.exists() {
@@ -116,38 +130,65 @@ impl TemplateEngine {
             )));
         }
 
-        // Register sibling files so Tera's {% include %} directive can find them
-        if let Some(parent) = path.parent() {
-            if parent.exists() {
-                if let Ok(entries) = std::fs::read_dir(parent) {
-                    for entry in entries.flatten() {
-                        let sibling_path = entry.path();
+        // A bare file name has an empty parent; its siblings live in ".".
+        let parent = match path.parent() {
+            Some(dir) if !dir.as_os_str().is_empty() => dir,
+            _ => Path::new("."),
+        };
+        let own_path = absolute_path(path);
+        let excluded: HashSet<PathBuf> = exclude.iter().map(|p| absolute_path(p)).collect();
 
-                        if sibling_path.is_dir() {
-                            continue;
-                        }
-
-                        if sibling_path == path {
-                            continue;
-                        }
-
-                        let file_name = match sibling_path.file_name().and_then(|n| n.to_str()) {
-                            Some(name) => name.to_string(),
-                            None => continue,
-                        };
-                        if file_name.starts_with('.') {
-                            continue;
-                        }
-
-                        // Silently skip files that can't be parsed as templates
-                        let _ = self.tera.add_template_file(&sibling_path, Some(&file_name));
-                    }
+        let mut siblings = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(parent) {
+            for entry in entries.flatten() {
+                let sibling_path = entry.path();
+                if !sibling_path.is_file() {
+                    continue;
                 }
+                let file_name = match sibling_path.file_name().and_then(|n| n.to_str()) {
+                    Some(name) if !name.starts_with('.') => name.to_string(),
+                    _ => continue,
+                };
+                let sibling_abs = absolute_path(&sibling_path);
+                if sibling_abs == own_path || excluded.contains(&sibling_abs) {
+                    continue;
+                }
+                siblings.push((sibling_path, file_name));
             }
         }
+        self.register_siblings(siblings);
 
         self.tera.add_template_file(path, None)?;
         Ok(())
+    }
+
+    /**
+     * Register sibling templates regardless of directory iteration order.
+     * A single batch covers the common case. If any file fails (unparseable,
+     * or a child whose parent is not loaded yet), fall back to repeated
+     * passes so parents added in one pass satisfy children in the next.
+     * Files that never load are skipped; Tera reports them as unknown
+     * templates only if something actually references them.
+     * @author: skitsanos
+     */
+    fn register_siblings(&mut self, siblings: Vec<(PathBuf, String)>) {
+        if siblings.is_empty()
+            || self
+                .tera
+                .add_template_files(siblings.iter().map(|(path, name)| (path, Some(name))))
+                .is_ok()
+        {
+            return;
+        }
+
+        let mut pending = siblings;
+        loop {
+            let before = pending.len();
+            pending.retain(|(path, name)| self.tera.add_template_file(path, Some(name)).is_err());
+            if pending.is_empty() || pending.len() == before {
+                break;
+            }
+        }
     }
 
     /**
@@ -186,4 +227,13 @@ impl TemplateEngine {
         }
         Ok(())
     }
+}
+
+/**
+ * Absolute form of a path for identity comparisons, without touching the
+ * filesystem (files that are about to be created still compare correctly).
+ * @author: skitsanos
+ */
+pub fn absolute_path(path: &Path) -> PathBuf {
+    std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf())
 }
