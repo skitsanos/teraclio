@@ -37,5 +37,5 @@ uuid = { version = "1.29.0", features = ["v4"] }
 notify = "8.2.1"
 
 # Input format support
-noyalib = { version = "0.0.58", features = ["compat-serde-yaml"] }
+noyalib = { version = "0.0.60", features = ["compat-serde-yaml"] }
 toml = "1.1.8"
