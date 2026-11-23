@@ -34,7 +34,7 @@ chrono = "0.4.45"
 uuid = { version = "1.29.0", features = ["v4"] }
 
 # File watching
-notify = "8.2.1"
+notify = "9.0.0"
 
 # Input format support
 noyalib = { version = "0.0.58", features = ["compat-serde-yaml"] }
